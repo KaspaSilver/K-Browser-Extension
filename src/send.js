@@ -7,9 +7,9 @@
 //           addresses listed on the step. Skipped when the From is fixed (an address's own Send).
 //   Amount  the app's own keypad: "To" / "From" chips, KAS or your currency, Max, and the From
 //           address's Available under it. A request's amount is fixed: the request, no keypad.
-//   Review  swipe up to send: the amount, To, From and Total; only the fee (its Edit opens the fee
-//           editor) and coin control can change, and a Max amount is worked out again when they
-//           do. The password ("Confirm Send", wallet.js) is asked as the send starts, under the
+//   Review  tap to send (a swipe on iOS): the amount, To, From and Total; only the fee (its Edit
+//           opens the fee editor) and coin control can change, and a Max amount is worked out again
+//           when they do. It sends on the tap, with no password (KaPay iOS 5848fb0), under the
 //           BlockDAG; then Sent with the transaction, or Failed with the error and Try Again, or
 //           "Not confirmed" with only Done when the network never answered (KaPay 953b255).
 // A pre-filled recipient (Donate, a contact) or a payment request link opens on From (on the
@@ -909,7 +909,7 @@ export function showSend(opts) {
         // the amount was worked out from, in one transaction
         const picked = selectedOutpoints();
         const chunk = !picked && state.coins ? oneTransactionChunk(state.coins) : null;
-        result = await wallet.compound(opts.source, fee.toFixed(8), { fromAddress, outpoints: picked || (chunk ? chunk.map((c) => c.key) : null), picked: Boolean(picked) });
+        result = await wallet.compound(opts.source, fee.toFixed(8), { fromAddress, outpoints: picked || (chunk ? chunk.map((c) => c.key) : null) });
       } else if (state.maxMode) {
         const pin = state.maxPin;
         if (!maxPinCurrent(pin, { sourceAddress: fromAddress, totalFeeSompi: totalFeeSompi(), selection: selectedOutpoints() }) || pin.amountSompi !== amountSompi()) {
@@ -922,6 +922,8 @@ export function showSend(opts) {
           source: opts.source, destination: state.recipient.address, max: true,
           totalFeeKas: fee.toFixed(8), selectedOutpoints: selectedOutpoints(),
           maxAmountSompi: pin.amountSompi, maxOutpoints: pin.outpoints, fromAddress,
+          // on the tap alone, no password (KaPay iOS 5848fb0)
+          askPassword: false,
         });
       } else {
         const tip = Math.max(0, fee - (state.base?.sdkBaseKas || 0));
@@ -930,6 +932,7 @@ export function showSend(opts) {
           amountKas: state.amountText, tipKas: tip.toFixed(8), selectedOutpoints: selectedOutpoints(), fromAddress,
           // what the review shows: a send rebuilt from other coins that would pay more stops
           expectedFeeSompi: shownFeeSompi(),
+          askPassword: false,
         });
       }
       const txid = (result?.txids || [])[result?.txids?.length - 1] || "";

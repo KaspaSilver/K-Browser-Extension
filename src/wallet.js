@@ -848,9 +848,12 @@ async function spendFrom(address, start, { expectedFeeSompi = null, singleTransa
  * meanwhile throw MAX_AMOUNT_CHANGED with the new amount, and nothing is sent. `expectedFeeSompi`
  * (a normal send): the fee the Review showed - rebuilt from other coins, a send that would pay more
  * throws SEND_FEE_CHANGED and nothing is sent (KaPay iOS 1652437).
+ * `askPassword`: KaPay's own Send passes false - a Kaspa send goes on the tap alone (KaPay iOS
+ * 5848fb0, the owner's choice of 2026-11-13). A payment a website asked for keeps the password: no
+ * iOS screen is asked by someone else to pay, and a site is (approve.js leaves it on).
  */
-export async function send({ source, destination, amountKas = null, tipKas = "0", totalFeeKas = null, selectedOutpoints = null, max = false, maxAmountSompi = null, maxOutpoints = null, fromAddress = null, fromAccountId = null, totalText = null, extraFeeText = null, beforeBuild = null, onAuthorized = null, expectedFeeSompi = null }) {
-  await confirmSpend({ amountText: max ? sompiText(maxAmountSompi) : sompiText(kasToSompi(String(amountKas ?? ""))), recipient: destination, max, totalText, extraFeeText });
+export async function send({ source, destination, amountKas = null, tipKas = "0", totalFeeKas = null, selectedOutpoints = null, max = false, maxAmountSompi = null, maxOutpoints = null, fromAddress = null, fromAccountId = null, totalText = null, extraFeeText = null, beforeBuild = null, onAuthorized = null, expectedFeeSompi = null, askPassword = true }) {
+  if (askPassword) await confirmSpend({ amountText: max ? sompiText(maxAmountSompi) : sompiText(kasToSompi(String(amountKas ?? ""))), recipient: destination, max, totalText, extraFeeText });
   // the caller's last word, after the password (which can sit open for a while) and before anything
   // is built: false stops here (audit 2026-11-07)
   if (beforeBuild && !(await beforeBuild())) {
@@ -966,12 +969,9 @@ async function recordQuietly(record) {
  *  as shown, raised only to the network floor. A Max send to the source itself, which a quantum-safe
  *  source signs with its redeem script like any other send. `fromAddress` / `fromAccountId`: the
  *  source the screen showed (a different key is refused, SOURCE_CHANGED). */
-export async function compound(source, totalFeeKas = null, { fromAddress = null, fromAccountId = null, outpoints = null, picked = false } = {}) {
+export async function compound(source, totalFeeKas = null, { fromAddress = null, fromAccountId = null, outpoints = null } = {}) {
   const from = await sourceWallet(source, { address: fromAddress, accountId: fromAccountId });
-  const chunked = Array.isArray(outpoints) && outpoints.length > 0;
-  const coinsText = !chunked ? "Every coin into one" : picked ? `The ${outpoints.length} coins you picked into one` : `Your ${outpoints.length} largest coins into one`;
-  await confirmSpend({ title: "Confirm Compound", amountText: coinsText, recipient: from.address });
-  // picked after the password, like every send's coins
+  // a Kaspa send to itself: no password, as for every Kaspa send (KaPay iOS 5848fb0)
   const pick = await maxPickAt(from.address, outpoints);
   // consolidating spends too: the key is on chain now (the shield comes off)
   return afterSend(spendFrom(from.address, async (engine) => sendMaxKaspa({

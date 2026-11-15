@@ -1,7 +1,8 @@
-// The password before every KAS you send (KaChat-Desktop Build 228, the owner's rule of 2026-10-23,
-// without Face ID here: the wallet password). wallet.js asks this before anything is built or a
-// node is touched - Send Kaspa, Max, Compound, a spending address's send, .kas transfers, and
-// payments approved for websites - so no screen can skip it. Cancelling sends nothing.
+// The wallet password where KaPay iOS asks Face ID (iOS DeviceAuth). Kaspa sends no longer ask
+// (KaPay iOS 5848fb0, the owner's choice of 2026-11-13): Send Kaspa, Max and Compound go on the
+// tap. It is still asked before .kas transfers (Send Domain, Finish Transfer), Set as Primary, and
+// payments a website asks for (approve.js), before anything is built or a node is touched.
+// Cancelling sends nothing.
 
 import { app, esc } from "./ui.js";
 import * as vault from "./vault.js";
