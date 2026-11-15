@@ -24,7 +24,7 @@ import QRCode from "qrcode";
 import * as wallet from "./wallet.js";
 import * as vault from "./vault.js";
 import * as dock from "./dock.js";
-import { getLocal, setLocal } from "./browser.js";
+import { getLocal, setLocal, removeLocal } from "./browser.js";
 import {
   app, esc, render, $, toast, copyText, ICONS, navHeader, showQr, showSheet, showAlert, formatKas8,
 } from "./ui.js";
@@ -745,6 +745,10 @@ function showAccount({ accountId, onBack }) {
       onConfirm: async () => {
         const accounts = await loadAccounts();
         await saveAccounts(accounts.filter((a) => a.id !== accountId), store.key);
+        // its coin labels go with it, unless another list still watches that KasSigner key (KaPay
+        // iOS 5848fb0)
+        const removed = accounts.filter((a) => a.id === accountId);
+        await wallet.coldUtxoLabelKeys(removed).then((keys) => keys.length && removeLocal(keys)).catch(() => {});
         onBack();
       },
     });

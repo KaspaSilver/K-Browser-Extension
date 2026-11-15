@@ -17,10 +17,10 @@ import { quantumAddressForRedeem } from "../shared/engine/quantum.js";
 //
 // The node goes on listing a spent coin until its spend is in a block, so the next send, Max or fee
 // would pick it again and be refused. Its key ("txid:index") is held for SPENT_COIN_HOLD_MS (iOS
-// spentOutpointHold = 120). Not after "Not confirmed" (KaPay iOS 2da5f4b): a resend then picks the
-// same coins, so at most one of the two can land. Holds are { key: { until, address } } records;
-// nothing here mutates one.
-export const SPENT_COIN_HOLD_MS = 120_000;
+// spentOutpointHold: 600 s since KaPay iOS 5848fb0, was 120). Not after "Not confirmed" (KaPay iOS
+// 2da5f4b): a resend then picks the same coins, so at most one of the two can land. Holds are
+// { key: { until, address } } records; nothing here mutates one.
+export const SPENT_COIN_HOLD_MS = 600_000;
 // iOS has no words of its own for this (its send just finds "No spendable UTXOs").
 export const HELD_COINS_MESSAGE = "Your last send is still settling. Try again in a moment.";
 

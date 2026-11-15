@@ -237,10 +237,14 @@ export async function reorderPortfolios(ids) {
 
 export const amountKasOf = (tx) => Number(tx.amountSompi) / 1e8;
 
-/** round(kas x 1e8), refused when not finite or out of Int64 range (PortfolioViewModel.sompi). */
+/** The most KAS a row may hold: 29 billion, the supply's ceiling (KaPay iOS 5848fb0
+ *  KaspaUnit.maxTypedSompi; it was the Int64 limit). */
+export const MAX_TYPED_SOMPI = 29_000_000_000n * 100_000_000n;
+
+/** round(kas x 1e8), refused when not finite or past MAX_TYPED_SOMPI (PortfolioViewModel.sompi). */
 export function kasToSompiString(kas) {
   const value = Math.round(Number(kas) * 1e8);
-  if (!Number.isFinite(value) || Math.abs(value) >= 9.2e18) return null;
+  if (!Number.isFinite(value) || Math.abs(value) > Number(MAX_TYPED_SOMPI)) return null;
   return BigInt(value).toString();
 }
 
@@ -578,8 +582,24 @@ export function trimmedAll(value) {
 
 // --- number input (PortfolioNumber.parse, DecimalInputFormat) -----------------------------------
 
+/** Digits of any script as ASCII ("٣", "۳", "३" -> "3"), and the Arabic decimal and group signs as
+ *  "." and "," (KaPay iOS 5848fb0 PortfolioNumber.parse). */
+export function asciiDigits(text) {
+  return String(text ?? "")
+    .replace(/\p{Nd}/gu, (d) => {
+      // Unicode keeps every script's digits as runs of ten, 0 to 9 (some runs back to back): the
+      // value is the distance from the start of the run of digits, modulo ten
+      const code = d.codePointAt(0);
+      let start = code;
+      while (start > 0 && /\p{Nd}/u.test(String.fromCodePoint(start - 1))) start -= 1;
+      return String((code - start) % 10);
+    })
+    .replace(/\u066B/g, ".")
+    .replace(/\u066C/g, ",");
+}
+
 export function parsePortfolioNumber(text) {
-  let cleaned = String(text ?? "").replace(/[^0-9,.\-]/g, "");
+  let cleaned = asciiDigits(text).replace(/[^0-9,.\-]/g, "");
   if (!cleaned) return null;
   const commas = (cleaned.match(/,/g) || []).length;
   const dots = (cleaned.match(/\./g) || []).length;
@@ -624,7 +644,7 @@ export function groupedFromCanonical(text) {
 
 export function inputValue(text) {
   const { group, decimal } = SEPARATORS;
-  const bare = String(text ?? "").split(group).join("").replace(decimal, ".").replace(",", ".");
+  const bare = asciiDigits(text).split(group).join("").replace(decimal, ".").replace(",", ".");
   if (!bare.trim()) return null;
   const value = Number(bare);
   return Number.isFinite(value) ? value : null;
@@ -760,8 +780,10 @@ export function refreshSpotPriceIfStale() {
     // Still fresh: the ranges and cards may need their series (first visit this session).
     ensureHistory(market.rangeDays);
     ensureSevenDay();
+    const epoch = market.epoch;
     if (market.rank == null) fetchKasMarketStats({ currency: store.currency }).then((stats) => {
-      if (!stats) return;
+      // a currency changed meanwhile: these are the old one's (KaPay iOS 5848fb0)
+      if (!stats || epoch !== market.epoch) return;
       market.marketCap = stats.marketCap ?? null; market.rank = stats.rank ?? null; emit("price");
     });
   }

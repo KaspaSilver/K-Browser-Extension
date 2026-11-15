@@ -15,6 +15,8 @@ import {
   deriveSpendingAddressRange,
   deriveIdentityAddressRange,
   sourceFamilySupportsIndexScan,
+  seedPassphrase,
+  importPrivateKey,
 } from "../shared/engine/wallet.js";
 import { IMPORT_WALLET_TYPES, rankImportCandidates } from "./import-search.js";
 import {
@@ -35,7 +37,8 @@ import {
   transferDomain as knsTransferDomain, setKnsPrimaryDomain, setKnsPendingStorage, listPendingKnsTransfers,
   resumeKnsTransfer, clearPendingKnsTransfer,
 } from "../shared/engine/kns-write.js";
-import { getLocal, setLocal, removeLocal, getSession, setSession } from "./browser.js";
+import { getLocal, setLocal, removeLocal, getSession, setSession, localArea } from "./browser.js";
+import { reencodeAddress } from "../shared/engine/network.js";
 import { IS_TESTNET, NETWORK as ACTIVE_NETWORK, NETWORK_ID, ADDRESS_PREFIX, KAS_UNIT, netKey, MAINNET_REST, TESTNET_REST, MAINNET_KNS, TESTNET_KNS, isValidKaspaAddress, networkOfAddress } from "./net.js";
 import { addressShapeOk, lowercasedKaspaAddress } from "./address-rules.js";
 import { activeAccountSecrets, accountSecretsById, ACCOUNT_IDS_KEY } from "./vault.js";
@@ -583,7 +586,7 @@ async function withRpc(fn) {
 // --- Coins a send just spent (KaPay iOS 0799cec recordSpend / unreservedUtxos) ------------------
 //
 // The node lists a spent coin until its spend is in a block, so a send's inputs stay out of the next
-// send, Max and fee for two minutes (send-coins.js), but not after "Not confirmed" (KaPay iOS
+// send, Max and fee for ten minutes (send-coins.js, KaPay iOS 5848fb0), but not after "Not confirmed" (KaPay iOS
 // 2da5f4b: a resend picks the same coins, so at most one of the two can land). They're kept in
 // storage.session too: the popup closes when it loses focus, and a send started again from it (or
 // from the full tab) a moment later must still leave them out. The engine applies its reserved list
@@ -1088,6 +1091,31 @@ function utxoLabelsKey(address) { return `kachat.utxoLabels.${address}`; }
 
 export async function utxoLabels(address) {
   return (await getLocal(utxoLabelsKey(address))) || {};
+}
+
+/**
+ * The coin-label keys of Cold Storage accounts being removed: each one's addresses, 0 to its
+ * maxAddressIndex, on both networks - unless another Cold Storage list here still watches the same
+ * KasSigner key (KaPay iOS 5848fb0 removeAccount). `ignoreLists`: the storage keys of lists going
+ * too (a deleted wallet account's own), which don't count as still watching.
+ */
+export async function coldUtxoLabelKeys(removed, { ignoreLists = [] } = {}) {
+  let all = {};
+  try { all = (await localArea?.get(null)) || {}; } catch { all = {}; }
+  const watched = new Set();
+  for (const [key, list] of Object.entries(all)) {
+    if (!/^kachat\.cold\.[^.]+(\.testnet)?$/.test(key) || ignoreLists.includes(key) || !Array.isArray(list)) continue;
+    for (const account of list) if (account?.kpub) watched.add(String(account.kpub).trim());
+  }
+  const keys = [];
+  for (const account of removed || []) {
+    const kpub = String(account?.kpub || "").trim();
+    if (!kpub || watched.has(kpub)) continue;
+    let addresses = [];
+    try { addresses = await kpubAddresses(kpub, 0, Math.max(0, Number.parseInt(account.maxAddressIndex, 10) || 0) + 1); } catch { continue; }
+    for (const address of addresses) for (const hrp of ["kaspa", "kaspatest"]) keys.push(utxoLabelsKey(reencodeAddress(String(address), hrp)));
+  }
+  return [...new Set(keys)];
 }
 
 export async function setUtxoLabel(address, outpointKey, label) {
@@ -1854,22 +1882,44 @@ export function discardDomainTransfer(assetId) {
 /**
  * Import's search, before there's an account (KaPay iOS 018e634 WalletManager.findImportAccounts):
  * every wallet type's addresses (import-search.js IMPORT_WALLET_TYPES) in one balance read, plus a
- * history probe of each type's #0. -> the addresses with funds or history, likeliest first
- * (rankImportCandidates); empty when nothing has any activity; null when the words are invalid or
- * the balances couldn't be read.
+ * history probe of each type's #0. -> { accounts, changeSompi }: `accounts` the addresses with
+ * funds or history, likeliest first (rankImportCandidates), empty when nothing has any activity;
+ * `changeSompi` what the standard wallet's change addresses hold - other wallets send change there,
+ * and no import opens one, so the screen says so (KaPay iOS 5848fb0). null when the words are
+ * invalid or the balances couldn't be read.
  */
 export async function findImportAccounts(phrase, passphrase = "") {
   try {
     const candidates = await importCandidates(phrase, passphrase, (type) => type.depth);
     if (!candidates.length) return null;
+    const change = await standardChangeAddresses(phrase, passphrase, 20);
     const [balances, withHistory] = await Promise.all([
-      balancesFor(candidates.map((c) => c.address)).catch(() => null),
+      balancesFor([...candidates.map((c) => c.address), ...change]).catch(() => null),
       addressesWithHistory(candidates.filter((c) => c.index === 0).map((c) => c.address)),
     ]);
     if (!balances) return null;
-    return rankImportCandidates(candidates, balances, withHistory);
+    const changeSompi = change.reduce((sum, address) => sum + BigInt(balances[address] ?? 0n), 0n);
+    return { accounts: rankImportCandidates(candidates, balances, withHistory), changeSompi };
   } catch {
     return null;
+  }
+}
+
+/** The standard wallet's change addresses, m/44'/111111'/0'/1/0 to count - 1 (KaPay iOS 5848fb0
+ *  standardChangeAddresses), from the same seed every derivation here uses (NFKD words and
+ *  passphrase). Empty when they can't be derived. */
+async function standardChangeAddresses(phrase, passphrase, count) {
+  try {
+    const k = await kaspa();
+    const clean = String(phrase || "").trim().toLowerCase().replace(/\s+/g, " ").normalize("NFKD");
+    const master = new k.XPrv(new k.Mnemonic(clean).toSeed(seedPassphrase(passphrase)));
+    const out = [];
+    for (let i = 0; i < count; i += 1) {
+      try { out.push(importPrivateKey(k, master.derivePath(`m/44'/111111'/0'/1/${i}`).toPrivateKey().toString()).address); } catch { /* one bad index sinks nothing */ }
+    }
+    return out;
+  } catch {
+    return [];
   }
 }
 

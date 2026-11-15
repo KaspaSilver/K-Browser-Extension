@@ -636,7 +636,8 @@ function showEditor(id) {
     const base = quantity != null && price != null ? quantity * price : null;
     const total = base == null ? null : form.type === "buy" ? base + fee : form.type === "sell" ? base - fee : base;
     // A transfer needs only its amount; its price counts for nothing.
-    return { quantity, price, total, valid: (quantity || 0) > 0 && (form.type === "transfer" || (price || 0) > 0) };
+    // past 29 billion KAS a row can't be kept (KaPay iOS 5848fb0 isValid)
+    return { quantity, price, total, valid: (quantity || 0) > 0 && core.kasToSompiString(quantity) != null && (form.type === "transfer" || (price || 0) > 0) };
   };
   const close = () => showPortfolio();
   render(`
@@ -688,14 +689,21 @@ function showEditor(id) {
   notes.oninput = () => { form.notes = notes.value; grow(); };
   grow();
   $("#pf-ed-cancel").onclick = close;
+  // a second click while the first is saving adds nothing (KaPay iOS 5848fb0 isSaving)
+  let saving = false;
   $("#pf-ed-save").onclick = async () => {
     const v = values();
-    if (!v.valid) return;
+    if (!v.valid || saving) return;
+    saving = true;
     const trimmed = form.notes.trim();
     // A transfer with no price is still a complete record.
     const fields = { type: form.type, amountKas: v.quantity, fiatValue: v.total ?? 0, timestamp: form.timestamp, notes: trimmed || null };
-    if (existing) await core.updateTransaction(existing.id, fields);
-    else await core.addTransaction(fields);
+    try {
+      if (existing) await core.updateTransaction(existing.id, fields);
+      else await core.addTransaction(fields);
+    } finally {
+      saving = false;
+    }
     close();
   };
   $("#pf-ed-delete")?.addEventListener("click", async () => { await core.deleteTransactions([existing.id]); close(); });
@@ -1049,14 +1057,21 @@ export async function showAddToPortfolio(opts) {
     const notes = panel.body.querySelector("#pf-atp-notes");
     notes.oninput = () => { s.notes = notes.value; notes.style.height = "auto"; notes.style.height = `${notes.scrollHeight}px`; };
   };
+  // one row however many times Confirm is clicked (KaPay iOS 5848fb0 isSaving)
+  let saving = false;
   async function confirm() {
     const a = amount();
-    if (!s.selected || !(a > 0)) return;
+    if (!s.selected || !(a > 0) || core.kasToSompiString(a) == null || saving) return;
+    saving = true;
     const trimmed = s.notes.trim();
-    await core.addTransaction({
-      type: s.type, amountKas: a, fiatValue: total() ?? 0, timestamp: s.date, notes: trimmed ? s.notes : null,
-      portfolioId: s.selected.id, sourceAddress: candidate.address, sourceTxId: candidate.txid,
-    });
+    try {
+      await core.addTransaction({
+        type: s.type, amountKas: a, fiatValue: total() ?? 0, timestamp: s.date, notes: trimmed ? s.notes : null,
+        portfolioId: s.selected.id, sourceAddress: candidate.address, sourceTxId: candidate.txid,
+      });
+    } finally {
+      saving = false;
+    }
     added = s.selected;
     panel.close();
   }

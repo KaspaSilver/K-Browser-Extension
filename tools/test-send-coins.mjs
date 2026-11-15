@@ -33,20 +33,20 @@ const txid = (n) => n.toString(16).padStart(64, "0");
 
 // --- holds ---------------------------------------------------------------------------------------
 
-await check("a send's coins are held for 120 s, at their address", () => {
-  assert.equal(SPENT_COIN_HOLD_MS, 120_000);
+await check("a send's coins are held for 600 s (KaPay iOS 5848fb0), at their address", () => {
+  assert.equal(SPENT_COIN_HOLD_MS, 600_000);
   const holds = holdSpentCoins({}, ["a:0", "b:1"], A, T0);
   assert.deepEqual(heldKeys(holds, T0), ["a:0", "b:1"]);
-  assert.deepEqual(heldKeys(holds, T0 + 119_999), ["a:0", "b:1"]);
-  assert.deepEqual(heldKeys(holds, T0 + 120_000), []);
+  assert.deepEqual(heldKeys(holds, T0 + 599_999), ["a:0", "b:1"]);
+  assert.deepEqual(heldKeys(holds, T0 + 600_000), []);
   assert.equal(heldCountAt(holds, A.toUpperCase(), T0), 2);
   assert.equal(heldCountAt(holds, B, T0), 0);
-  assert.equal(nextHoldExpiry(holds, T0), T0 + 120_000);
-  assert.equal(nextHoldExpiry(holds, T0 + 120_000), null);
+  assert.equal(nextHoldExpiry(holds, T0), T0 + 600_000);
+  assert.equal(nextHoldExpiry(holds, T0 + 600_000), null);
 });
 await check("holding more never mutates the old holds and drops expired ones", () => {
   const first = holdSpentCoins({}, ["a:0"], A, T0);
-  const second = holdSpentCoins(first, [{ outpoint: { transactionId: "b", index: 1 } }, "junk"], B, T0 + 130_000);
+  const second = holdSpentCoins(first, [{ outpoint: { transactionId: "b", index: 1 } }, "junk"], B, T0 + 610_000);
   assert.deepEqual(Object.keys(first), ["a:0"]);
   assert.deepEqual(Object.keys(second), ["b:1"]);
   assert.deepEqual(liveHolds({ x: { until: "nope" }, y: null }, T0), {});
@@ -56,7 +56,7 @@ await check("another window's holds merge in; the later expiry wins", () => {
   const theirs = holdSpentCoins({}, ["a:0", "c:2"], A, T0 + 10_000);
   const merged = mergeHolds(mine, theirs, T0 + 10_000);
   assert.deepEqual(Object.keys(merged).sort(), ["a:0", "c:2"]);
-  assert.equal(merged["a:0"].until, T0 + 130_000);
+  assert.equal(merged["a:0"].until, T0 + 610_000);
   assert.deepEqual(mergeHolds(mine, undefined, T0), mine);
 });
 await check("held coins leave node entries and wallet.utxos rows alike", () => {
@@ -64,7 +64,7 @@ await check("held coins leave node entries and wallet.utxos rows alike", () => {
   const entries = [{ outpoint: { transactionId: "a", index: 0 } }, { outpoint: { transactionId: "a", index: 1 } }];
   assert.deepEqual(withoutHeldCoins(entries, holds, T0), [entries[1]]);
   assert.deepEqual(withoutHeldCoins([{ key: "a:0" }, { key: "b:0" }], holds, T0), [{ key: "b:0" }]);
-  assert.equal(withoutHeldCoins(entries, holds, T0 + 120_000).length, 2);
+  assert.equal(withoutHeldCoins(entries, holds, T0 + 600_000).length, 2);
   assert.deepEqual(withoutHeldCoins(null, {}, T0), []);
 });
 await check("the engine's scheduled-post words become the held-coin message; anything else stands", () => {

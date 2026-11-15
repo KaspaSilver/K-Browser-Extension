@@ -259,9 +259,14 @@ export async function deleteAccount(accountId, mainAddress) {
     const others = view.accounts.filter((a) => a.id !== accountId).map((a) => a.id);
     const otherCaches = await Promise.all(others.flatMap((id) => [getLocal(`kachat.addresses.${id}`), getLocal(`kachat.addresses.${id}.testnet`)])).catch(() => []);
     const keep = otherCaches.flatMap((cache) => [cache?.main, ...Object.values(cache?.spending || {})]).filter(Boolean);
+    // its Cold Storage accounts' coin labels, unless another account here watches the same
+    // KasSigner key (KaPay iOS 5848fb0 removeLocalData)
+    const coldLists = [`kachat.cold.${accountId}`, `kachat.cold.${accountId}.testnet`];
+    const coldAccounts = (await Promise.all(coldLists.map((key) => getLocal(key))).catch(() => [])).flatMap((list) => (Array.isArray(list) ? list : []));
+    const coldLabels = await wallet.coldUtxoLabelKeys(coldAccounts, { ignoreLists: coldLists }).catch(() => []);
     await vault.removeAccount(accountId);
     const { local, page } = accountDataKeys({ accountId, chatting, addresses, variants: bothNetworks, keep });
-    await removeLocal(local);
+    await removeLocal([...local, ...coldLabels]);
     for (const key of page) { try { localStorage.removeItem(key); } catch { /* nothing kept */ } }
     await setLocal(LAST_USED_KEY, withoutAccount(await getLocal(LAST_USED_KEY), accountId));
     await wallet.forgetUsedAddresses([chatting, ...addresses], keep).catch(() => {});
@@ -456,6 +461,7 @@ const ADDRESS_PREVIEW_HTML = `
     <div class="preview-address" id="preview">Checking...</div>
     <div class="preview-balance"><span class="muted small">Balance</span><span id="preview-balance"><span class="spinner small-spin"></span></span></div>
     <div class="small" id="preview-hint" hidden></div>
+    <div class="small warn-text" id="preview-other" hidden></div>
     <div id="preview-found"></div>
     <div id="preview-every"></div>
     <div id="preview-incomplete"></div>
@@ -482,6 +488,8 @@ function mountAddressPreview({ flow, typed, onSearching = () => {} }) {
   const root = app.querySelector(".preview");
   const el = (id) => (root?.isConnected ? root.querySelector(`#${id}`) : null);
   let found = [];
+  // what the standard wallet's change addresses hold (KaPay iOS 5848fb0): no import opens one
+  let changeSompi = 0n;
   let everyType = [];
   let showsEveryType = false;
   let searching = false;
@@ -529,6 +537,14 @@ function mountAddressPreview({ flow, typed, onSearching = () => {} }) {
     for (const button of list.querySelectorAll("[data-found]")) {
       button.onclick = () => select(rows.find((row) => candidateId(row) === button.dataset.found));
     }
+    // Funds on these words' other addresses: only the one picked is imported, so say how much
+    // more there is (KaPay iOS 5848fb0 otherFundsSompi)
+    const other = el("preview-other");
+    if (other) {
+      const otherSompi = found.filter((row) => !sameChoice(flow.choice, row)).reduce((sum, row) => sum + BigInt(row.balanceSompi || 0n), changeSompi);
+      other.hidden = !(searches && !searching && flow.choice && otherSompi > 0n);
+      if (!other.hidden) other.textContent = `Other addresses of these words hold ${wallet.formatKas(otherSompi, 8)} KAS more. KaPay tracks only the address picked here.`;
+    }
     every.innerHTML = searches && !searching && everyType.length && !showsEveryType
       ? '<button type="button" class="link-button small" id="every-type">See Every Wallet Type</button>' : "";
     const everyButton = el("every-type");
@@ -552,6 +568,7 @@ function mountAddressPreview({ flow, typed, onSearching = () => {} }) {
     const passphrase = typed();
     flow.choice = { ...DEFAULT_IMPORT_CHOICE };
     found = [];
+    changeSompi = 0n;
     everyType = [];
     showsEveryType = false;
     el("preview-incomplete").innerHTML = "";
@@ -585,7 +602,8 @@ function mountAddressPreview({ flow, typed, onSearching = () => {} }) {
         clearTimeout(searchTimer);
         if (!current()) return;
         if (!answer) { failed(); searchIncomplete(); return; }
-        found = answer;
+        found = answer.accounts;
+        changeSompi = answer.changeSompi;
         setSearching(false);
         if (found.length) select(found[0]); else showBalance(0n);
         return;
