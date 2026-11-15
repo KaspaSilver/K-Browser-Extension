@@ -146,7 +146,7 @@ export function showDomains({ address, onBack, atCards = false, service = null }
       ${navHeader({ title: names.service(selectedTab)?.suffix || "Your Domains" })}
       <section class="screen domains" id="domains-body">${body}</section>
       ${selectedTab === "kachat"
-        ? (liveTab?.showsInscribe ? '<div class="get-domain-bar"><button class="get-domain" id="inscribe">Inscribe</button></div>' : "")
+        ? (liveTab?.showsInscribe ? '<div class="get-domain-bar"><button class="get-domain" id="inscribe">Claim a Name</button></div>' : "")
         : `<div class="get-domain-bar">${getNameButton(selectedTab)}</div>`}`, "domains");
     remember(() => paint());
     // back to the cards
@@ -164,7 +164,7 @@ export function showDomains({ address, onBack, atCards = false, service = null }
       };
     }
     if (selectedTab === "kachat" && liveTab) liveTab.bind(app, { openName: (info) => showLiveNameDetail({ info, onBack: back }) });
-    // Inscribe (iOS e4da63d): the .kachat marketplace; a new name shows here on the way back.
+    // Claim a Name (iOS e4da63d; "Inscribe" until KaPay iOS 5848fb0): the .kachat marketplace; a new name shows here on the way back.
     const inscribe = $("#inscribe");
     // the marketplace is its own tab (claiming lands back in Your Domains on its own: the registry refreshes)
     if (inscribe) inscribe.onclick = () => selectTab("kachat");

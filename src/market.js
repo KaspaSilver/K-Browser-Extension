@@ -2,9 +2,10 @@
 // KachatListingDetailView, KachatBuySheet and KachatOfferSheet (Kaspa Hub > .kachat on iOS; here
 // the .kachat row under Your Domains).
 //
-// The tab is the logo and four numbered cards - Marketplace, Available, Expired, Activity - each
-// opening its page; only the Marketplace has the name search (KaPay 99ab88a). A card's number is
-// how many live on its page, "-" until the registry has answered.
+// The tab leads with the name search (KaPay iOS 5848fb0, 7daf3f1): the logo and "Claim your name on
+// Kaspa", "Type the name you want" with Claim on a free name, then any claims in progress, your
+// names, and a short row of Available, For sale, Expired and the latest activity, each with See All
+// for its page (Marketplace, Available, Expired, Activity; KaPay 99ab88a).
 //
 // On mainnet it is UI only, as on iOS: search answers "Registration isn't open yet", listings,
 // offers and activity are placeholder skeletons, and every final action is disabled. No invented
@@ -37,28 +38,25 @@ const pill = () => '<span class="coming-pill">Coming soon</span>';
 const header = (title, detail) => `
   <div class="km-header"><div class="km-title">${esc(title)}</div>${detail ? `<div class="muted tiny">${esc(detail)}</div>` : ""}</div>`;
 
-// The pages behind the cards (KaPay 99ab88a KachatMarketView.Page): names for sale, names back on
+// The pages behind See All (KaPay 99ab88a KachatMarketView.Page): names for sale, names back on
 // the market (Available), names in their grace period (Expired), and everything that happens in
 // the registry.
 const PAGES = [
-  { id: "market", title: "Marketplace", icon: "tag" },
-  { id: "available", title: "Available", icon: "sealCheck" },
-  { id: "expired", title: "Expired", icon: "hourglass" },
-  { id: "activity", title: "Activity", icon: "history" },
+  { id: "market", title: "Marketplace" },
+  { id: "available", title: "Available" },
+  { id: "expired", title: "Expired" },
+  { id: "activity", title: "Activity" },
 ];
-// The cards' icons not in SYMBOLS: checkmark.seal and clock.arrow.circlepath (KaPay 99ab88a).
-const CARD_ICONS = {
-  sealCheck: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1.8l2.4 1.8 3-.2.9 2.9 2.5 1.7-1 2.8 1 2.8-2.5 1.7-.9 2.9-3-.2L12 22.2l-2.4-1.8-3 .2-.9-2.9-2.5-1.7 1-2.8-1-2.8 2.5-1.7.9-2.9 3 .2Z"/><path d="m8.4 12.3 2.4 2.4 4.8-5"/></svg>',
-  history: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.6 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9"/><path d="M4.5 4.8V9h4.2"/><path d="M12 8v4.3l2.8 1.7"/></svg>',
-};
+// xmark.circle.fill: clears the search (KaPay iOS 5848fb0)
+const CLEAR_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M9 9l6 6M15 9l-6 6" stroke="var(--bg)" stroke-width="2.2" stroke-linecap="round"/></svg>';
 
 const isLive = () => kachatLive && live.hub.isLive;
 // Live, or not launched here (mainnet): the same pages - empty on mainnet (iOS 7227d69). The
 // placeholder pages remain only for a testnet registry that is setting up.
 const livePages = () => isLive() || !kachatLaunched;
 
-// The names being claimed, with a count (iOS b219bb0 KachatClaimsButton): beside How it works on
-// the cards, alone on a page.
+// The names being claimed, with a count (iOS b219bb0 KachatClaimsButton), on a page; the .kachat
+// screen shows the claims themselves (KaPay iOS 5848fb0).
 const claimsButton = () => (isLive() ? live.claimsButtonHtml() : "");
 const bindClaims = () => { const b = $("#claims"); if (b) b.onclick = () => live.openClaimsList(); };
 
@@ -76,28 +74,23 @@ function follow(paintParts, { start = true } = {}) {
   }
 }
 
-/** The .kachat tab's first screen (its own place in the dock): the logo and a numbered card per
- *  page - Marketplace, Available, Expired, Activity - each opening its page (KaPay 99ab88a). No
- *  Back, unless it was opened from somewhere else (`onBack`). */
-export function showKachatMarket({ onBack = null } = {}) {
-  const back = () => showKachatMarket({ onBack });
-
-  /** How many live on a page; "-" until the registry has answered (KaPay 99ab88a count(of:)). */
-  const countText = (id) => {
-    const h = live.hub;
-    if (!isLive() || !h.loaded || h.loadError) return "-";
-    const list = id === "available" ? h.lapsed : id === "expired" ? h.grace : id === "activity" ? h.activity : h.listings;
-    return String(list.length);
+/** The .kachat tab's first screen (its own place in the dock), KaPay iOS 5848fb0: the logo and
+ *  "Claim your name on Kaspa", then the name search with Claim on a free name, then - live - any
+ *  claims in progress, your names, and a short row of Available, For sale, Expired and the latest
+ *  activity, each with See All for its page. No Back, unless it was opened from somewhere else
+ *  (`onBack`). `search` and `scroll` are where it was, coming back from a name or a page. */
+export function showKachatMarket({ onBack = null, search = "", scroll = 0 } = {}) {
+  const state = { search };
+  const at = () => app.querySelector(".km")?.scrollTop || 0;
+  const again = (top = 0) => showKachatMarket({ onBack, search: state.search, scroll: top });
+  // a name opened here stays in the .kachat tab, and Back comes back to this screen as it was
+  const nav = {
+    openName: (info) => {
+      const top = at();
+      live.hub.onChange = null;
+      live.showLiveNameDetail({ info, onBack: () => again(top), screen: "kachat:name" });
+    },
   };
-  const cardsHtml = () => PAGES.map((p) => `
-    <button class="km-card km-hub-card" data-open-page="${p.id}">
-      <span class="km-hub-card-top">
-        <span class="accent km-hub-card-icon">${SYMBOLS[p.icon] || CARD_ICONS[p.icon]}</span>
-        <span class="km-chevron">${ICONS.chevron}</span>
-      </span>
-      <span class="km-hub-card-count" data-count="${p.id}">${esc(countText(p.id))}</span>
-      <span class="km-hub-card-title">${esc(p.title)}</span>
-    </button>`).join("");
 
   const heroStatus = () => {
     // the Testnet badge on testnet only; mainnet is live as it is (iOS ef6b21e)
@@ -113,60 +106,8 @@ export function showKachatMarket({ onBack = null } = {}) {
     return pill() + error;
   };
 
-  render(`
-    <header class="navbar">
-      ${onBack ? `<button class="nav-back" id="back" aria-label="Back">${ICONS.back}<span>Back</span></button>` : "<span></span>"}
-      <div class="nav-title">.kachat</div>
-      <div class="nav-right km-nav-actions">
-        <span id="km-claims">${claimsButton()}</span>
-        <button class="icon plain accent" id="how" aria-label="How it works">${SYMBOLS.question}</button>
-      </div>
-    </header>
-    ${backupBannerHtml()}
-    <section class="km">
-      <div class="km-hero compact">
-        ${kachatWordmark(64)}
-        <div id="km-status">${heroStatus()}</div>
-      </div>
-      <div class="km-hub-cards">${cardsHtml()}</div>
-    </section>`, "kachat:market");
-  dock.remember(back);
-  if (onBack) $("#back").onclick = onBack;
-  // .kachat has no title: the backup banner sits under the bar (KaPay iOS 953b255)
-  bindBackupBanner(back);
-  $("#how").onclick = () => showHowItWorks(isLive());
-  bindClaims();
-  for (const card of app.querySelectorAll("[data-open-page]")) {
-    card.onclick = () => showKachatPage(card.dataset.openPage, { onBack: back });
-  }
-
-  // Live updates redraw the parts in place.
-  const paintParts = () => {
-    if (app.dataset.screen !== "kachat:market") return;
-    $("#km-status").innerHTML = heroStatus();
-    $("#km-claims").innerHTML = claimsButton();
-    bindClaims();
-    for (const count of app.querySelectorAll("[data-count]")) count.textContent = countText(count.dataset.count);
-  };
-  follow(paintParts);
-}
-
-/** A card's page (KaPay 99ab88a pageScreen): its title and the claims button on top; only the
- *  Marketplace has the name search ("Find a name"). Back goes to the cards. `search` and `scroll`
- *  are where it was, coming back from a name opened on it. */
-function showKachatPage(id, { onBack, search = "", scroll = 0 }) {
-  const page = PAGES.find((p) => p.id === id) || PAGES[0];
-  const state = { search: page.id === "market" ? search : "" };
-  const again = (at = 0) => showKachatPage(page.id, { onBack, search: state.search, scroll: at });
-  // a name opened here stays in the .kachat tab, and Back comes back to this page as it was
-  const nav = {
-    openName: (info) => {
-      const at = app.querySelector(".km")?.scrollTop || 0;
-      live.hub.onChange = null;
-      live.showLiveNameDetail({ info, onBack: () => again(at), screen: "kachat:name" });
-    },
-  };
-
+  // The search (KaPay iOS 5848fb0 KachatNameSearchCard, 7daf3f1): "Type the name you want" in the
+  // field, nothing under it until something is typed; then Available (Claim) or Taken (it opens).
   const searchResult = () => {
     const typed = state.search.trim().toLowerCase();
     if (!typed) return "";
@@ -177,16 +118,103 @@ function showKachatPage(id, { onBack, search = "", scroll = 0 }) {
         <button class="km-prominent small-button" disabled>Claim</button>
       </div>`;
   };
-  // The Marketplace's search (KaPay 99ab88a KachatNameSearchCard): Available or Taken.
-  const searchHtml = () => `
-    <div class="km-search">
-      <label class="km-card km-search-field">
-        <span class="muted">${ICONS.search}</span>
-        <input id="search" value="${esc(state.search)}" placeholder="Find a name" autocomplete="off" autocapitalize="off" spellcheck="false" />
-        <span class="muted strong">.kachat</span>
-      </label>
-      <div id="search-result">${searchResult()}</div>
-    </div>`;
+
+  render(`
+    <header class="navbar">
+      ${onBack ? `<button class="nav-back" id="back" aria-label="Back">${ICONS.back}<span>Back</span></button>` : "<span></span>"}
+      <div class="nav-title">.kachat</div>
+      <div class="nav-right km-nav-actions">
+        <button class="icon plain accent" id="how" aria-label="How it works">${SYMBOLS.question}</button>
+      </div>
+    </header>
+    ${backupBannerHtml()}
+    <section class="km km-hub">
+      <div class="km-hero compact">
+        ${kachatWordmark(64)}
+        <p class="muted small km-tagline">Claim your name on Kaspa</p>
+        <div id="km-status">${heroStatus()}</div>
+      </div>
+      <div class="km-search km-search-lead">
+        <label class="km-card km-search-field">
+          <span class="accent km-search-icon">${ICONS.search}</span>
+          <input id="search" type="text" value="${esc(state.search)}" placeholder="Type the name you want" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" />
+          <button type="button" class="km-search-clear" id="search-clear" aria-label="Clear" ${state.search ? "" : "hidden"}>${CLEAR_ICON}</button>
+          <span class="accent strong km-search-suffix">.kachat</span>
+        </label>
+        <div id="search-result">${searchResult()}</div>
+      </div>
+      <div class="km-hub-sections" id="km-sections">${live.hubSectionsHtml()}</div>
+    </section>`, "kachat:market");
+  dock.remember(() => again());
+  if (onBack) $("#back").onclick = onBack;
+  // .kachat has no title: the backup banner sits under the bar (KaPay iOS 953b255)
+  bindBackupBanner(() => again());
+  $("#how").onclick = () => showHowItWorks(isLive());
+  const scroller = app.querySelector(".km");
+  if (scroller) scroller.scrollTop = scroll;
+
+  const field = $("#search");
+  const clear = $("#search-clear");
+  const paintSearch = () => {
+    const result = $("#search-result");
+    if (!result) return;
+    result.innerHTML = searchResult();
+    if (isLive()) live.bindSearchResult(result, nav);
+  };
+  const typed = () => {
+    clear.hidden = !state.search;
+    if (isLive()) live.hub.lookup(state.search.trim().toLowerCase());
+    paintSearch();
+  };
+  field.oninput = () => { state.search = field.value; typed(); };
+  clear.onclick = () => { state.search = ""; field.value = ""; typed(); field.focus(); };
+  // coming back from a name: the result for what is still typed
+  if (state.search.trim() && isLive()) live.hub.lookup(state.search.trim().toLowerCase());
+
+  const bindSections = () => {
+    const sections = $("#km-sections");
+    if (!sections) return;
+    live.bindHubSections(sections, nav);
+    for (const b of sections.querySelectorAll("[data-see-all]")) {
+      b.onclick = () => {
+        const top = at();
+        live.hub.onChange = null;
+        showKachatPage(b.dataset.seeAll, { onBack: () => again(top) });
+      };
+    }
+  };
+  // Live updates redraw the parts in place: typing keeps its focus, a row keeps where it was scrolled.
+  const paintParts = () => {
+    if (app.dataset.screen !== "kachat:market") return;
+    const top = at();
+    $("#km-status").innerHTML = heroStatus();
+    const sections = $("#km-sections");
+    const rows = [...sections.querySelectorAll(".kl-carousel")].map((row) => row.scrollLeft);
+    sections.innerHTML = live.hubSectionsHtml();
+    sections.querySelectorAll(".kl-carousel").forEach((row, i) => { if (rows[i]) row.scrollLeft = rows[i]; });
+    bindSections();
+    paintSearch();
+    const el = app.querySelector(".km");
+    if (el) el.scrollTop = top;
+  };
+  bindSections();
+  paintSearch();
+  follow(paintParts);
+}
+
+/** A section's full page (KaPay 99ab88a pageScreen, See All on the .kachat screen since KaPay iOS
+ *  5848fb0): its title, and the claims button while names are being claimed. Back goes to the
+ *  screen. `scroll` is where it was, coming back from a name opened on it. */
+function showKachatPage(id, { onBack, scroll = 0 }) {
+  const page = PAGES.find((p) => p.id === id) || PAGES[0];
+  const again = (at = 0) => showKachatPage(page.id, { onBack, scroll: at });
+  const nav = {
+    openName: (info) => {
+      const at = app.querySelector(".km")?.scrollTop || 0;
+      live.hub.onChange = null;
+      live.showLiveNameDetail({ info, onBack: () => again(at), screen: "kachat:name" });
+    },
+  };
 
   // A name tile's shape, redacted: no invented name or price (iOS tilePlaceholder, 27a4f39 / c488d1d).
   const tile = (attr = "") => `<button class="km-card kl-tile" ${attr}>${live.nameTileHtml(redact("somename"), redact("000 KAS"))}</button>`;
@@ -231,7 +259,6 @@ function showKachatPage(id, { onBack, search = "", scroll = 0 }) {
       <div class="nav-right km-nav-actions"><span id="km-claims">${claimsButton()}</span></div>
     </header>
     <section class="km km-page-screen">
-      ${page.id === "market" ? searchHtml() : ""}
       <div class="km-page" id="km-page">${pageHtml()}</div>
     </section>`, "kachat:page");
   dock.remember(() => again());
@@ -239,28 +266,12 @@ function showKachatPage(id, { onBack, search = "", scroll = 0 }) {
   if (scroller) scroller.scrollTop = scroll;
   $("#back").onclick = onBack;
   bindClaims();
-  const field = $("#search");
-  if (field) {
-    field.oninput = () => {
-      state.search = field.value;
-      if (isLive()) live.hub.lookup(state.search.trim().toLowerCase());
-      paintSearch();
-    };
-    // coming back from a name: the result for what is still typed
-    if (state.search.trim() && isLive()) live.hub.lookup(state.search.trim().toLowerCase());
-  }
 
   const bindParts = () => {
     for (const listing of app.querySelectorAll("[data-listing]")) listing.onclick = () => showListing({ onBack: () => again() });
     if (livePages()) live.bindLivePage($("#km-page"), nav);
   };
-  const paintSearch = () => {
-    const result = $("#search-result");
-    if (!result) return;
-    result.innerHTML = searchResult();
-    if (isLive()) live.bindSearchResult(result, nav);
-  };
-  // Live updates redraw the parts in place, so typing in the search field keeps its focus.
+  // Live updates redraw the page in place.
   const paintParts = () => {
     if (app.dataset.screen !== "kachat:page") return;
     const el = app.querySelector(".km");
@@ -268,13 +279,11 @@ function showKachatPage(id, { onBack, search = "", scroll = 0 }) {
     $("#km-claims").innerHTML = claimsButton();
     bindClaims();
     $("#km-page").innerHTML = pageHtml();
-    paintSearch();
     bindParts();
     if (el) el.scrollTop = top;
   };
   bindParts();
-  paintSearch();
-  // the cards already started the hub: a page only follows it (and starts it if it never got going)
+  // the screen already started the hub: a page only follows it (and starts it if it never got going)
   follow(paintParts, { start: false });
 }
 

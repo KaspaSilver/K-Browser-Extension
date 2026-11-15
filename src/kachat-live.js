@@ -518,6 +518,9 @@ export const hub = {
   lapsed: [],
   /** expired and still in grace: the Expired tab, each counting down to its release (iOS cb3c27d) */
   grace: [],
+  /** this wallet's names, on its chatting address and every used address (the .kachat screen's
+   *  Your Names, KaPay iOS 5848fb0; Your Domains loads its own) */
+  mine: [],
   activity: [],
   loadError: null,
   loaded: false,
@@ -578,7 +581,12 @@ export const hub = {
       this.lapsed = await reg.lapsed();
       // a failed read keeps what's on screen (KaPay iOS 2da5f4b)
       this.grace = await reg.inGrace().catch(() => this.grace);
-      // Your own names and the offers you made live in Profile > Your Domains (iOS 0765ce0).
+      // Your Names on the .kachat screen (KaPay iOS 5848fb0): every address of this wallet, as Your
+      // Domains reads them (iOS d1026de); a failed read keeps what's on screen
+      try {
+        const actions = (await runtime().catch(() => null))?.actions;
+        this.mine = actions?.myKey ? (await actions.ownNamesAndOffers({ heldOnly: false })).names : [];
+      } catch { /* the names shown stay */ }
       this.activity = await reg.activity();
       this.loadError = null;
     } catch (error) {
@@ -920,48 +928,96 @@ export const nameGridHtml = (tilesHtml) => `<div class="kl-tile-grid">${tilesHtm
 
 const loadErrorHtml = () => (hub.loadError ? `<p class="error-text small kl-pad">${esc(hub.loadError)}</p>` : "");
 
-/** The selected tab's live page: Marketplace (names for sale), Available or Activity. Your own
- *  names and the offers you made live in Profile > Your Domains (iOS 0765ce0). */
+/** A name for sale: its asking price and, under it, when the name expires - "Expires soon" when
+ *  less than expiresSoonMs is left (iOS ad184c3). Opens the name. The Marketplace page's grid and
+ *  the .kachat screen's row (KaPay iOS 5848fb0 KachatListingTile). */
+function listingTileHtml(n) {
+  const p = params();
+  const soonMs = p ? paramsExpiresSoonMs(p) : 30n * 86_400_000n;
+  const soon = n.expiresAt - soonMs < BigInt(Date.now());
+  return `
+    <button class="km-card kl-tile" data-name="${esc(n.name)}" aria-label="${esc(n.display)}">
+      ${nameTileHtml(esc(n.name), `
+        <span class="kl-tile-price">${esc(amount(n.price))}</span>
+        <span class="muted tiny kl-tile-expiry">Expires ${esc(day(n.expiresAt))}</span>
+        ${soon ? '<span class="kl-tile-soon">Expires soon</span>' : ""}`)}
+    </button>`;
+}
+
+/** A name expired past grace, back on the market at the normal price (iOS eea52b2): the price and a
+ *  Claim button that keeps its own click; the tile itself opens the name (KaPay iOS 5848fb0
+ *  KachatLapsedTile). */
+function lapsedTileHtml(n) {
+  const price = namePrice(n.name);
+  return `
+    <div class="km-card kl-tile kl-tile-split">
+      <button class="kl-tile-open" data-name="${esc(n.name)}" aria-label="${esc(n.display)}"></button>
+      ${nameTileHtml(esc(n.name), `
+        ${price != null ? `<span class="kl-tile-price">${esc(amount(price))}</span>` : ""}
+        <button class="km-prominent small-button kl-tile-button" data-claim-expired="${esc(n.name)}">Claim</button>`)}
+    </div>`;
+}
+
+/** A name in its grace period - only its owner can renew it - counting down to its release; at zero
+ *  the hub reloads and it moves to Available (iOS cb3c27d, KaPay iOS 5848fb0 KachatGraceTile). */
+function graceTileHtml(n) {
+  const releaseAt = n.expiresAt + graceMs();
+  const price = namePrice(n.name);
+  return `
+    <button class="km-card kl-tile" data-name="${esc(n.name)}" aria-label="${esc(n.display)}">
+      ${nameTileHtml(esc(n.name), `
+        <span class="kl-tile-release"><span class="muted tiny">Released in</span>${countdownHtml(releaseAt, { reloadKey: `${n.name}:${releaseAt}` })}</span>
+        ${price != null ? `<span class="muted tiny kl-tile-expiry">${esc(amount(price))}</span>` : ""}`)}
+    </button>`;
+}
+
+/** One of your names: Listed / Expired, then when it expires or its grace ends. Opens its page -
+ *  renew, list, transfer, the profile (KaPay iOS 5848fb0 yourNames). */
+function ownTileHtml(n) {
+  const badge = ownNameBadge(n);
+  return `
+    <button class="km-card kl-tile" data-name="${esc(n.name)}" aria-label="${esc(n.display)}">
+      ${nameTileHtml(esc(n.name), `
+        ${badge ? `<span class="kl-tile-soon">${esc(badge)}</span>` : ""}
+        <span class="muted tiny kl-tile-expiry">${esc(ownNameExpiryLine(n))}</span>`)}
+    </button>`;
+}
+
+/** Your name's badge (iOS KachatLiveDomainsTab.badge): Listed while for sale, Expired in grace,
+ *  Available once past it; nothing for an active unlisted name. */
+function ownNameBadge(n) {
+  const status = statusOf(n);
+  if (status === Status.active) return n.isListed ? "Listed" : null;
+  return status === Status.grace ? "Expired" : "Available";
+}
+
+/** When your name runs out (iOS 72b7dc7 expiryLine): "Expires <date>" - with the time once less
+ *  than two days are left - or "Grace ends <date>" in its grace period. */
+function ownNameExpiryLine(n) {
+  const grace = statusOf(n) === Status.grace;
+  const at = Number(grace ? n.expiresAt + graceMs() : n.expiresAt);
+  const soon = at - Date.now() < 2 * 86_400_000;
+  const when = new Date(at).toLocaleString(undefined, soon
+    ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }
+    : { month: "short", day: "numeric", year: "numeric" });
+  return grace ? `Grace ends ${when}` : `Expires ${when}`;
+}
+
+/** The selected page: Marketplace (names for sale), Available, Expired or Activity. */
 export function livePageHtml(page) {
   if (page === "available") {
-    // Names that expired and stayed unrenewed through grace - back on the market at the normal
-    // price (iOS eea52b2). A tile opens the name; its Claim button keeps its own click and starts
-    // the claim (the driver frees the old record and registers it in one go).
+    // A tile opens the name; its Claim button starts the claim (the driver frees the old record
+    // and registers it in one go, iOS eea52b2).
     return `
       ${sectionHeader("Available")}
-      ${hub.lapsed.length
-        ? nameGridHtml(hub.lapsed.map((n) => {
-          const price = namePrice(n.name);
-          return `
-            <div class="km-card kl-tile kl-tile-split">
-              <button class="kl-tile-open" data-name="${esc(n.name)}" aria-label="${esc(n.display)}"></button>
-              ${nameTileHtml(esc(n.name), `
-                ${price != null ? `<span class="kl-tile-price">${esc(amount(price))}</span>` : ""}
-                <button class="km-prominent small-button kl-tile-button" data-claim-expired="${esc(n.name)}">Claim</button>`)}
-            </div>`;
-        }).join(""))
-        : emptyCard(hub.loaded ? "No expired names right now." : null)}
+      ${hub.lapsed.length ? nameGridHtml(hub.lapsed.map(lapsedTileHtml).join("")) : emptyCard(hub.loaded ? "No expired names right now." : null)}
       ${loadErrorHtml()}`;
   }
   if (page === "expired") {
-    // Names that expired and are still in their grace period - only their owner can renew them -
-    // soonest release first, each counting down to its release to Available, with its claim price.
-    // When one reaches zero the hub reloads and it moves to Available (iOS cb3c27d).
-    const grace = graceMs();
+    // soonest release first, each with its claim price (iOS cb3c27d)
     return `
       ${sectionHeader("Expired")}
-      ${hub.grace.length
-        ? nameGridHtml(hub.grace.map((n) => {
-          const releaseAt = n.expiresAt + grace;
-          const price = namePrice(n.name);
-          return `
-            <button class="km-card kl-tile" data-name="${esc(n.name)}" aria-label="${esc(n.display)}">
-              ${nameTileHtml(esc(n.name), `
-                <span class="kl-tile-release"><span class="muted tiny">Released in</span>${countdownHtml(releaseAt, { reloadKey: `${n.name}:${releaseAt}` })}</span>
-                ${price != null ? `<span class="muted tiny kl-tile-expiry">${esc(amount(price))}</span>` : ""}`)}
-            </button>`;
-        }).join(""))
-        : emptyCard(hub.loaded ? "No names are in their grace period right now." : null)}
+      ${hub.grace.length ? nameGridHtml(hub.grace.map(graceTileHtml).join("")) : emptyCard(hub.loaded ? "No names are in their grace period right now." : null)}
       ${loadErrorHtml()}`;
   }
   if (page === "activity") {
@@ -972,23 +1028,61 @@ export function livePageHtml(page) {
         : emptyCard(hub.loaded ? "Nothing yet." : null)}
       ${loadErrorHtml()}`;
   }
-  // For sale: the asking price and, under it, when the name expires - "Expires soon" when less
-  // than expiresSoonMs is left, so a buyer sees what they get before opening it (iOS ad184c3).
-  const p = params();
-  const soonMs = p ? paramsExpiresSoonMs(p) : 30n * 86_400_000n;
-  const now = BigInt(Date.now());
   return `
     ${sectionHeader("For sale")}
-    ${hub.listings.length
-      ? nameGridHtml(hub.listings.map((n) => `
-          <button class="km-card kl-tile" data-name="${esc(n.name)}" aria-label="${esc(n.display)}">
-            ${nameTileHtml(esc(n.name), `
-              <span class="kl-tile-price">${esc(amount(n.price))}</span>
-              <span class="muted tiny kl-tile-expiry">Expires ${esc(day(n.expiresAt))}</span>
-              ${n.expiresAt - soonMs < now ? '<span class="kl-tile-soon">Expires soon</span>' : ""}`)}
-          </button>`).join(""))
-      : emptyCard(hub.loaded ? "No names are listed right now." : null)}
+    ${hub.listings.length ? nameGridHtml(hub.listings.map(listingTileHtml).join("")) : emptyCard(hub.loaded ? "No names are listed right now." : null)}
     ${loadErrorHtml()}`;
+}
+
+// --- Hub: the .kachat screen under the search (KaPay iOS 5848fb0 liveSections) -------------------
+
+/** A section's title, with See All when it has a full page (iOS hubHeader). */
+function hubHeaderHtml(title, seeAll = null) {
+  return `
+    <div class="kl-hub-header">
+      <h2>${esc(title)}</h2>
+      ${seeAll ? `<button class="kl-see-all" data-see-all="${esc(seeAll)}">See All</button>` : ""}
+    </div>`;
+}
+
+/** A short row of tiles that scrolls sideways (iOS carousel); its scroll bar stays thin but
+ *  visible here, so a mouse can move it. */
+const carouselHtml = (tilesHtml) => `<div class="kl-carousel">${tilesHtml}</div>`;
+
+/** Any claims in progress, your names, then a short row of each page - Available, For sale,
+ *  Expired - and the latest activity, each with See All for its page (KaPay iOS 5848fb0). Live
+ *  only: where the registry isn't open the screen is the logo and the search. */
+export function hubSectionsHtml() {
+  if (!hub.isLive) return "";
+  const parts = [];
+  const open = openRegistrations();
+  if (open.length) {
+    parts.push(`<section class="kl-hub-section">${hubHeaderHtml("Claiming")}<div class="kl-hub-claims">${open.map((r) => registrationCardHtml(r)).join("")}</div></section>`);
+  }
+  const own = hub.mine.filter((n) => statusOf(n) !== Status.lapsed);
+  if (own.length) parts.push(`<section class="kl-hub-section">${hubHeaderHtml("Your Names")}${carouselHtml(own.map(ownTileHtml).join(""))}</section>`);
+  if (!hub.loaded) {
+    parts.push('<div class="center-text kl-hub-loading"><span class="spinner"></span></div>');
+  } else if (hub.loadError) {
+    parts.push(`<p class="muted small center-text kl-pad">${esc(hub.loadError)}</p>`);
+  } else {
+    if (hub.lapsed.length) parts.push(`<section class="kl-hub-section">${hubHeaderHtml("Available", "available")}${carouselHtml(hub.lapsed.slice(0, 12).map(lapsedTileHtml).join(""))}</section>`);
+    parts.push(`<section class="kl-hub-section">${hubHeaderHtml("For sale", hub.listings.length ? "market" : null)}${hub.listings.length
+      ? carouselHtml(hub.listings.slice(0, 12).map(listingTileHtml).join(""))
+      : emptyCard("No names are listed right now.")}</section>`);
+    if (hub.grace.length) parts.push(`<section class="kl-hub-section">${hubHeaderHtml("Expired", "expired")}${carouselHtml(hub.grace.slice(0, 12).map(graceTileHtml).join(""))}</section>`);
+    if (hub.activity.length) {
+      parts.push(`<section class="kl-hub-section">${hubHeaderHtml("Recent activity", "activity")}<div class="km-card km-list">${hub.activity.slice(0, 4).map((e) => eventRowHtml(e, true)).join("")}</div></section>`);
+    }
+  }
+  return parts.join("");
+}
+
+/** Binds the sections: names open, Claim claims, the claim cards' buttons work. See All is the
+ *  screen's (`data-see-all`). */
+export function bindHubSections(container, nav) {
+  bindLivePage(container, nav);
+  bindRegistrationCards(container);
 }
 
 /** Claim on an expired name (an Available tile, or the name's own page): the claim sheet on the gap
@@ -1004,7 +1098,7 @@ export function bindLivePage(container, nav) {
   for (const row of container.querySelectorAll("[data-name]")) {
     row.onclick = () => {
       const name = row.dataset.name;
-      const info = [...hub.listings, ...hub.lapsed, ...hub.grace].find((n) => n.name === name);
+      const info = [...hub.mine, ...hub.listings, ...hub.lapsed, ...hub.grace].find((n) => n.name === name);
       if (info) nav.openName(info);
     };
   }
@@ -2822,20 +2916,8 @@ export function liveDomainsTab({ address, repaint, forAddress = false }) {
   }
   // When it runs out, bottom right (iOS 72b7dc7): "Expires <date>" - with the time once less than
   // two days are left - or "Grace ends <date>" for a name expired and in its grace period.
-  const cardFootnote = (n) => {
-    const grace = statusOf(n) === Status.grace;
-    const at = Number(grace ? n.expiresAt + graceMs() : n.expiresAt);
-    const soon = at - Date.now() < 2 * 86_400_000;
-    const when = new Date(at).toLocaleString(undefined, soon
-      ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }
-      : { month: "short", day: "numeric", year: "numeric" });
-    return grace ? `Grace ends ${when}` : `Expires ${when}`;
-  };
-  const badge = (n) => {
-    const status = statusOf(n);
-    if (status === Status.active) return n.isListed ? "Listed" : null;
-    return status === Status.grace ? "Expired" : "Available";
-  };
+  const cardFootnote = ownNameExpiryLine;
+  const badge = ownNameBadge;
   const upgrading = Boolean(registry()?.registryUpgrading || kachatRegistry() && entry.upgrading);
   const html = upgrading
     ? `<div class="kachat-coming">

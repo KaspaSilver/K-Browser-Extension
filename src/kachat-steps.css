@@ -59,20 +59,41 @@ body.tab .kl-offer-entry .ss-key { height: 52px; }
 .kl-claim-length-chevron { flex: 0 0 auto; display: grid; place-items: center; color: var(--kaspa-ink); }
 .kl-claim-years-note { margin: 2px 0 0; line-height: 1.4; }
 
-/* The .kachat tab's cards (KaPay 99ab88a KachatHubCard; market.js): two to a row under the logo,
-   each its page's icon and chevron, how many live there, and its title. A card's page starts just
-   under the bar. */
-.km-hub-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 16px; }
-.km-hub-card {
-  display: flex; flex-direction: column; align-items: stretch; gap: 10px; min-width: 0; padding: 14px; margin: 0;
-  border-radius: 16px; color: var(--text); font-weight: 400; text-align: left; cursor: pointer;
-  transition: transform .12s ease, background-color .12s ease;
+/* The .kachat screen leads with the name search (KaPay iOS 5848fb0, 7daf3f1): a larger field with an
+   accent outline, a clear button, .kachat in the accent colour. */
+.km-tagline { margin: 0; }
+.km-search-lead .km-search-field {
+  padding: 14px; border-radius: 16px;
+  box-shadow: inset 0 0 0 1.2px color-mix(in srgb, var(--kaspa) 60%, transparent);
 }
-@media (hover: hover) { .km-hub-card:hover { background: color-mix(in srgb, var(--kaspa) 8%, var(--panel)); } }
-.km-hub-card:active { transform: scale(.98); }
-.km-hub-card-top { display: flex; align-items: center; justify-content: space-between; }
-.km-hub-card-icon { display: inline-flex; }
-.km-hub-card-icon svg { width: 22px; height: 22px; }
-.km-hub-card-count { font-size: 28px; font-weight: 700; line-height: 34px; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.km-hub-card-title { font-size: 15px; font-weight: 600; line-height: 20px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.km-search-lead .km-search-field:focus-within { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--kaspa) 80%, transparent); }
+.km-search-lead .km-search-field input { font-size: 18px; }
+.km-search-icon { display: inline-flex; }
+.km-search-suffix { font-size: 18px; }
+.km-search-clear {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer;
+}
+.km-search-clear[hidden] { display: none; }
+.km-search-clear svg { width: 18px; height: 18px; }
+
+/* Under the search: claims in progress, your names, then a short row of each page with See All. */
+.km-hub { gap: 24px; }
+.km-hub-sections { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.km-hub-sections:empty { display: none; }
+.kl-hub-section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.kl-hub-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 16px; }
+.kl-hub-header h2 { margin: 0; font-size: 19px; font-weight: 700; line-height: 24px; }
+.kl-see-all { padding: 0; border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; color: var(--kaspa); }
+@media (hover: hover) { .kl-see-all:hover { text-decoration: underline; } }
+/* A row that scrolls sideways (iOS carousel). On a computer the scroll bar stays, thin, so a mouse
+   can move it (and Shift + wheel does); See All shows the whole page. */
+.kl-carousel {
+  display: flex; align-items: stretch; gap: 12px; min-width: 0;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity;
+  padding: 2px 16px 8px; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+.kl-carousel > .kl-tile { flex: 0 0 148px; width: 148px; scroll-snap-align: start; scroll-margin-left: 16px; }
+.kl-hub-claims { display: flex; flex-direction: column; gap: 10px; }
+.kl-hub-loading { padding: 12px 0; }
 .km-page-screen { padding-top: 8px; }
