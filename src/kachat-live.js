@@ -1243,7 +1243,7 @@ const labeledRow = (title, value, bold = false) =>
 /** When the wallet's KAS is in more small coins than a name transaction can take, the swipe first
  *  sends a self-send combining them (the engine's `combinesCoins`): said on the review, as on iOS
  *  and Desktop (EXT-022). */
-function combineNoteHtml(text = "Your KAS is in many small coins. When you swipe, KaPay first combines them into one (a separate transaction with its own small fee), then sends this.") {
+function combineNoteHtml(text = "Your KAS is in many small coins. When you tap, KaPay first combines them into one (a separate transaction with its own small fee), then sends this.") {
   return `<div class="kl-busy-notice kl-combine-note" role="note">
     <span class="accent">${SYMBOLS.arrows}</span>
     <span class="kl-busy-copy"><span class="muted tiny">${esc(text)}</span></span>
@@ -1514,7 +1514,7 @@ function openTxSheet({
     let op = null;
     try { op = operation(); } catch { op = null; }
     if (!op || state.plan !== plan) {
-      state.sendError = "The cost changed. Check it and swipe again.";
+      state.sendError = "The cost changed. Check it and tap again.";
       screen.setBusy(false);
       paint();
       return;
@@ -1780,7 +1780,7 @@ function openClaimSheet(target) {
       screen.setBusy(false);
       paint();
     };
-    const priceChanged = "The price changed. Check it and swipe again.";
+    const priceChanged = "The price changed. Check it and tap again.";
     // the price shown is the most the registration will ever pay (iOS 4f5d95e, IOS-054), at the
     // speed it was quoted at
     const q = state.quote;

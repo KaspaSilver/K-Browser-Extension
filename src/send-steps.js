@@ -63,7 +63,7 @@ import { KAS_UNIT } from "./net.js";
 import { sompiFromUserText } from "./amounts.js";
 import { trimmedKas } from "./send-pieces.js";
 import { applyKeypadKey, usesCommaDecimal, keypadKeyForKeyboard, keypadFontSize, keypadDisplayText } from "./keypad.js";
-import { swipeUpThreshold, swipeUpEnding } from "./swipe-up.js";
+import { swipeUpThreshold, swipeUpEnding, tapBarTitle, TAP_SLOP_PX, tapRiseMs, tapRiseLift } from "./swipe-up.js";
 import "./send-steps.css";
 
 export { applyKeypadKey, keypadKeyForKeyboard, keypadFontSize, keypadDisplayText, usesCommaDecimal };
@@ -583,10 +583,16 @@ export function showSwipeUp({
   let dragging = false;
   let pointerId = null;
   let startY = 0;
+  let moved = false;     // the press moved past TAP_SLOP_PX: a swipe, not a tap
+  let tapping = false;   // a tap's rise is playing
+  let riseFrame = 0;
+  // On a computer the bar is a tap (owner, 2026-11-15): "Tap to Send", and the tap plays the rise.
+  const tapTitle = tapBarTitle(barTitle);
   const timers = new Set();
   const later = (ms, fn) => { const t = setTimeout(() => { timers.delete(t); if (host.isConnected) fn(); }, ms); timers.add(t); };
   const clearTimers = () => { for (const t of timers) clearTimeout(t); timers.clear(); };
   const active = () => on && !busy;
+  const reducedMotion = () => Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
   const height = () => host.clientHeight || 580;
   const threshold = () => swipeUpThreshold(height());
   const failureText = () => (failed && dagShown ? (String(getFailureMessage?.() || "").trim() || labels.failedFallback) : null);
@@ -594,8 +600,8 @@ export function showSwipeUp({
 
   function paintBar() {
     barIcon.innerHTML = armed ? ICON.check : ICON.up;
-    barText.textContent = armed ? labels.release : barTitle;
-    bar.setAttribute("aria-label", barTitle);
+    barText.textContent = armed && !tapping ? labels.release : tapTitle;
+    bar.setAttribute("aria-label", tapTitle);
     bar.setAttribute("aria-disabled", on ? "false" : "true");
     bar.classList.toggle("disabled", !on);
   }
@@ -622,7 +628,7 @@ export function showSwipeUp({
     dag.setDimmed(Boolean(done || failure));
     els.mark.innerHTML = done ? ICON.markDone : unknown ? ICON.markUnknown : (failure ? ICON.markFailed : "");
     els.mark.className = `sk-swipe-mark${ending.kind ? ` ${ending.kind}` : ""}`;
-    els.big.textContent = ending.title ?? (sending ? labels.working : (armed ? labels.release : "Keep Swiping"));
+    els.big.textContent = ending.title ?? (sending || tapping ? labels.working : (armed ? labels.release : "Keep Swiping"));
     const amount = sent?.amountSompi ?? preview.amountSompi;
     els.amount.hidden = amount == null;
     if (amount != null) els.amount.textContent = unitText(`${trimmedKas(amount)} ${KAS_UNIT}`);
@@ -690,12 +696,38 @@ export function showSwipeUp({
     lift = 0;
     paint(true);
   }
+  /** A tap: the review rises past the threshold as a swipe would push it, then it sends. */
+  function playTap() {
+    if (tapping || !active() || phase !== "form") return;
+    tapping = true;
+    preview = getPreview?.() || preview;
+    dag.restart();
+    const riseMs = tapRiseMs(reducedMotion());
+    const began = performance.now();
+    const step = (now) => {
+      riseFrame = 0;
+      if (!host.isConnected) { tapping = false; return; }
+      // turned off or started elsewhere while rising: it goes back down
+      if (!active() || phase !== "form") { tapping = false; springBack(); return; }
+      const t = (now - began) / riseMs;
+      lift = tapRiseLift(t, threshold());
+      armed = lift >= threshold();
+      paint(false);
+      if (t < 1) { riseFrame = requestAnimationFrame(step); return; }
+      later(120, () => {
+        tapping = false;
+        if (active() && phase === "form") startSending(); else springBack();
+      });
+    };
+    riseFrame = requestAnimationFrame(step);
+  }
 
   bar.addEventListener("pointerdown", (event) => {
-    if (!active() || phase !== "form") return;
+    if (!active() || phase !== "form" || tapping) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     event.preventDefault();
     dragging = true;
+    moved = false;
     pointerId = event.pointerId;
     startY = event.clientY;
     preview = getPreview?.() || {};
@@ -704,6 +736,9 @@ export function showSwipeUp({
   });
   bar.addEventListener("pointermove", (event) => {
     if (!dragging || event.pointerId !== pointerId) return;
+    // a hand's small wobble during a click is still a tap
+    if (!moved && Math.abs(startY - event.clientY) < TAP_SLOP_PX) return;
+    moved = true;
     lift = Math.max(0, startY - event.clientY);
     armed = lift >= threshold();
     paint(false);
@@ -712,6 +747,7 @@ export function showSwipeUp({
     if (!dragging || event.pointerId !== pointerId) return;
     dragging = false;
     pointerId = null;
+    if (!cancelled && !moved) { playTap(); return; }
     if (!cancelled && armed && active() && phase === "form") startSending();
     else springBack();
   };
@@ -719,19 +755,18 @@ export function showSwipeUp({
   bar.addEventListener("pointercancel", (event) => end(event, true));
   bar.addEventListener("lostpointercapture", (event) => end(event, true));
   bar.addEventListener("contextmenu", (event) => event.preventDefault());
-  // Enter / Space (and a screen reader's activation) send at once: iOS accessibilityAction.
+  // Enter / Space (and a screen reader's activation) are a tap too (iOS accessibilityAction).
   bar.addEventListener("click", (event) => {
     if (event.detail !== 0 || !active() || phase !== "form") return;
-    dag.restart();
-    startSending();
+    playTap();
   });
   els.final.addEventListener("click", () => {
     if (els.final.dataset.kind === "done") { try { onDone?.(); } catch { /* the screen tidies up on its own */ } }
     else returnToForm();
   });
   const onResize = () => {
-    if (!host.isConnected) { window.removeEventListener("resize", onResize); dag.stop(); return; }
-    if (phase === "sending") { lift = height() * 2; place(false); } else if (!dragging && lift) springBack();
+    if (!host.isConnected) { window.removeEventListener("resize", onResize); dag.stop(); if (riseFrame) cancelAnimationFrame(riseFrame); return; }
+    if (phase === "sending") { lift = height() * 2; place(false); } else if (!dragging && !tapping && lift) springBack();
   };
   window.addEventListener("resize", onResize);
 

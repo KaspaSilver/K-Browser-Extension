@@ -182,7 +182,7 @@ export function trimmedKasText(sompi) {
 
 /** The error a send stops with when it would pay `feeSompi`, more than the Review showed. */
 export function sendFeeChangedError(feeSompi, unit = "KAS") {
-  const error = new Error(`The network fee is now ${trimmedKasText(feeSompi)} ${unit}, more than the Review showed. Nothing was sent: check the new fee and swipe again.`);
+  const error = new Error(`The network fee is now ${trimmedKasText(feeSompi)} ${unit}, more than the Review showed. Nothing was sent: check the new fee and tap again.`);
   error.code = SEND_FEE_CHANGED;
   error.feeSompi = BigInt(feeSompi);
   return error;

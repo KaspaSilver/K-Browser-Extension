@@ -486,7 +486,7 @@ await check("the fee-changed words are iOS's, the fee in KAS with no trailing ze
   assert.equal(trimmedKasText(123_456_789n), "1.23456789");
   const error = sendFeeChangedError(31_000n, "TKAS");
   assert.equal(error.code, SEND_FEE_CHANGED);
-  assert.equal(error.message, "The network fee is now 0.00031 TKAS, more than the Review showed. Nothing was sent: check the new fee and swipe again.");
+  assert.equal(error.message, "The network fee is now 0.00031 TKAS, more than the Review showed. Nothing was sent: check the new fee and tap again.");
 });
 await check("within 1,000 sompi of the Review a send still goes (iOS's margin, KaPay iOS 2da5f4b); past it, it stops; no Review fee checks nothing", () => {
   assert.equal(REVIEW_FEE_MARGIN_SOMPI, 1_000n);

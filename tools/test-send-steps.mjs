@@ -4,7 +4,7 @@
 // KaPay 953b255). Run: node tools/test-send-steps.mjs
 import assert from "node:assert/strict";
 import { applyKeypadKey, keypadKeyForKeyboard, keypadFontSize, keypadDisplayText } from "../src/keypad.js";
-import { swipeUpThreshold, swipeUpEnding } from "../src/swipe-up.js";
+import { swipeUpThreshold, swipeUpEnding, tapBarTitle, tapRiseMs, tapRiseLift } from "../src/swipe-up.js";
 import { amountState } from "../src/amount-state.js";
 import { KAS_UNIT } from "../shared/engine/network.js";
 import { SEND_OUTCOME_UNKNOWN_MESSAGE, sendOutcomeUnknownError } from "../shared/engine/transactions.js";
@@ -117,6 +117,16 @@ check("any other failure is Failed with Try Again; a finished one is Done", () =
   assert.deepEqual(swipeUpEnding({ failure: "The send didn't go out." }), { kind: "failed", title: "Failed", final: "retry" });
   assert.deepEqual(swipeUpEnding({ done: true, doneTitle: "Name Bought" }), { kind: "done", title: "Name Bought", final: "done" });
   assert.deepEqual(swipeUpEnding({}), { kind: null, title: null, final: null });
+  // A tap on a computer (2026-11-15): iOS's bar words, said as a tap, and the rise it plays.
+  assert.equal(tapBarTitle("Swipe up to Send"), "Tap to Send");
+  assert.equal(tapBarTitle("Swipe up to Change Price"), "Tap to Change Price");
+  assert.equal(tapBarTitle("Swipe up to Confirm"), "Tap to Confirm");
+  assert.equal(tapBarTitle("Send"), "Send");
+  assert.equal(tapRiseLift(0, 180), 0);
+  assert.ok(tapRiseLift(1, 180) > 180, "a tap's rise ends past the threshold, so it sends");
+  assert.ok(tapRiseLift(0.5, 180) < 180 && tapRiseLift(0.25, 180) < tapRiseLift(0.75, 180));
+  assert.equal(tapRiseLift(2, 180), tapRiseLift(1, 180));
+  assert.ok(tapRiseMs(true) < tapRiseMs(false));
 });
 
 console.log(`\n${passed} passed`);
