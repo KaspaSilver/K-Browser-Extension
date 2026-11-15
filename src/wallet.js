@@ -37,6 +37,7 @@ import {
 } from "../shared/engine/kns-write.js";
 import { getLocal, setLocal, removeLocal, getSession, setSession } from "./browser.js";
 import { IS_TESTNET, NETWORK as ACTIVE_NETWORK, NETWORK_ID, ADDRESS_PREFIX, KAS_UNIT, netKey, MAINNET_REST, TESTNET_REST, MAINNET_KNS, TESTNET_KNS, isValidKaspaAddress, networkOfAddress } from "./net.js";
+import { addressShapeOk, lowercasedKaspaAddress } from "./address-rules.js";
 import { activeAccountSecrets, accountSecretsById, ACCOUNT_IDS_KEY } from "./vault.js";
 import { sompiFromUserText } from "./amounts.js";
 import { sourceChangedError, SOURCE_CHANGED, revealsToRetry, commitIsLive } from "./send-guards.js";
@@ -689,10 +690,12 @@ export function sompiToKasText(sompi) {
   return formatKas(sompi, 8).replace(/,/g, "");
 }
 
-/** Is this a valid mainnet Kaspa address? (checksum included, via the SDK) */
+/** Is this a valid Kaspa address of the running network? (checksum included, via the SDK; one
+ *  case and the payload length its version needs, KaPay iOS 5848fb0) */
 export async function isValidAddress(text) {
   const clean = String(text || "").trim();
   if (!clean.startsWith(ADDRESS_PREFIX) || !/^[a-z]+:[a-z0-9]{50,}$/.test(clean)) return false;
+  if (!addressShapeOk(clean)) return false;
   try {
     const k = await kaspa();
     return typeof k.Address?.validate === "function" ? Boolean(k.Address.validate(clean)) : Boolean(new k.Address(clean));
@@ -726,7 +729,9 @@ export async function resolveRecipient(input) {
   const text = String(input || "").trim();
   if (!text) throw new Error("Enter a Kaspa address (kaspa:...)");
   if (/^kaspa(test)?:/i.test(text)) {
-    const address = text.split("?")[0].toLowerCase();
+    // an all-capital address (compact QR codes) is read lowercased; a mixed-case one is refused
+    // (KaPay iOS 5848fb0 lowercasedKaspaAddress)
+    const address = lowercasedKaspaAddress(text.split("?")[0]);
     if (!(await isValidAddress(address))) throw new Error(otherNetworkReason(address) || "Invalid address format");
     return { address, domain: null, tld: null, resolutions: [] };
   }

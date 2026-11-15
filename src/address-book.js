@@ -21,6 +21,7 @@ import { app, esc, render, $, toast, ICONS, navHeader, showSheet, showAlert, isT
 import { getLocal, setLocal, removeLocal, ext } from "./browser.js";
 import { openPanel } from "./kachat-ui.js";
 import { isValidKaspaAddress, networkOfAddress, NETWORK, reencodeAddress } from "./net.js";
+import { addressShapeOk, lowercasedKaspaAddress } from "./address-rules.js";
 import { scanQr } from "./camera.js";
 import { looksLikeName, resolveEverywhere, primaryResolution, notFoundMessage, otherDomainsHtml, bindOtherDomains, splitTypedName } from "./names.js";
 import * as dock from "./dock.js";
@@ -148,7 +149,8 @@ async function persist() {
 
 /** Why `address` can't be saved, or null. */
 function invalidReason(address) {
-  if (!isValidKaspaAddress(address)) return "Enter a valid Kaspa address.";
+  // one case, a known prefix and the right payload length too (KaPay iOS 5848fb0)
+  if (!addressShapeOk(address)) return "Enter a valid Kaspa address.";
   if (networkOfAddress(address) !== NETWORK) return wallet.otherNetworkReason(address) || "Enter a valid Kaspa address.";
   return null;
 }
@@ -158,7 +160,8 @@ function invalidReason(address) {
  *  its note and photo, and goes by its address again. */
 async function save({ address, name, note = "", photo }) {
   if (!walletKey) throw new Error("Open a wallet first.");
-  const a = normalize(address);
+  // all capitals read lowercased, mixed case refused (KaPay iOS 5848fb0)
+  const a = lowercasedKaspaAddress(address);
   const n = String(name ?? "").trim();
   const bad = invalidReason(a);
   if (bad) throw new Error(bad);

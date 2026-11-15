@@ -15,6 +15,7 @@
 // the first in .kachat, .kas, .k, .kaspa that resolves, and the rest are offered as "Other domains".
 
 import { normalizeDomainLabel } from "../shared/engine/kns.js";
+import { validOnActiveNetwork } from "./address-rules.js";
 import { getEndpoint } from "../shared/engine/endpoints.js";
 import { dotkCanonical, kaspaNamesCanonical } from "./names-normalize.js";
 import { esc, ICONS } from "./ui.js";
@@ -153,7 +154,11 @@ async function resolveKachat(label) {
 export async function resolveEverywhere(input) {
   const { label } = splitTypedName(input);
   if (!label) return [];
-  const results = (await Promise.all([resolveKachat(label), resolveKas(label), resolveDotk(label), resolveKaspaNames(label)])).filter(Boolean);
+  const results = (await Promise.all([resolveKachat(label), resolveKas(label), resolveDotk(label), resolveKaspaNames(label)]))
+    .filter(Boolean)
+    // an answer that isn't a valid address of the running network is no answer: the lookup
+    // failed (KaPay iOS 5848fb0 NameResolution)
+    .map((r) => (r.address && !validOnActiveNetwork(r.address) ? { ...r, address: null, failed: true } : r));
   return RESOLUTION_ORDER.map((tld) => results.find((r) => r.tld === tld)).filter(Boolean);
 }
 
