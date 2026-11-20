@@ -6,7 +6,8 @@
 //                                    listed right on the step
 //   "How much?"                      the app's own keypad (KAS or your currency)
 //   Review                           the amount, Paid to, the memo; Copy Payment Request is the
-//                                    bottom button, Share under the memo
+//                                    bottom button, Show Request As QR under it (KaPay iOS
+//                                    0e05064), Share under the memo
 // Copy (or share) it and send it anywhere; in KaChat it opens Send Kaspa filled in, and shows it
 // was made by your chatting address (signed with its key, shared engine payment-request.js).
 //
@@ -14,6 +15,7 @@
 // shared, so opening the screen and cancelling uses none up; copying and sharing again reuse it.
 
 import { esc, toast, ICONS, settings, unitText } from "./ui.js";
+import { openPanel } from "./kachat-ui.js";
 import * as wallet from "./wallet.js";
 import * as vault from "./vault.js";
 import { returnToTab } from "./dock.js";
@@ -25,7 +27,7 @@ import {
   keypadAmountEntryHtml, paintKeypadAmountEntry, reviewAmountHtml,
 } from "./send-steps.js";
 import {
-  PAYMENT_REQUEST_MEMO_LIMIT, makePaymentRequest, signPaymentRequest, paymentRequestUniversalLink, clampMemoText, memoCharacters,
+  PAYMENT_REQUEST_MEMO_LIMIT, makePaymentRequest, signPaymentRequest, paymentRequestUniversalLink, paymentRequestKaPayLink, clampMemoText, memoCharacters,
 } from "../shared/engine/payment-request.js";
 
 const short = (a) => `${a.slice(0, 14)}...${a.slice(-6)}`;
@@ -210,6 +212,7 @@ export function showRequestPayment(opts = {}) {
       continueTitle: () => (state.copied && !state.working ? "Copied" : "Copy Payment Request"),
       canContinue: () => canMake() && !state.working,
       onContinue: copy,
+      secondary: { title: "Show Request As QR", iconHtml: ICONS.qr, onClick: showQr },
       direction,
     });
     const memo = handle.el.querySelector("#req-memo");
@@ -272,7 +275,10 @@ export function showRequestPayment(opts = {}) {
     return signPaymentRequest(unsigned, signer.address, signer.privateKeyHex) || unsigned;
   };
 
+  // Copy, Share and the QR: a second click while one is working does nothing - each would reserve a
+  // fresh address (KaPay iOS 0e05064)
   const copy = async () => {
+    if (state.working) return;
     state.working = true;
     state.error = "";
     refreshReview();
@@ -284,6 +290,7 @@ export function showRequestPayment(opts = {}) {
     refreshReview();
   };
   const shareLink = async () => {
+    if (state.working) return;
     state.working = true;
     state.error = "";
     refreshReview();
@@ -292,6 +299,34 @@ export function showRequestPayment(opts = {}) {
     refreshReview();
     if (!request) return;
     try { await navigator.share({ url: paymentRequestUniversalLink(request) }); } catch { /* closed */ }
+  };
+
+  /** Show Request As QR (KaPay iOS 0e05064 PaymentRequestQRSheet): the same signed request Copy and
+   *  Share give out, as a kapay://pay/ QR - an iPhone's camera opens KaPay on Send with everything
+   *  filled in. */
+  const showQr = async () => {
+    if (state.working) return;
+    state.working = true;
+    state.error = "";
+    refreshReview();
+    const request = await makeRequest();
+    state.working = false;
+    refreshReview();
+    if (!request) return;
+    const memo = String(request.memo || state.memo || "").trim();
+    const handle = openPanel({
+      title: "Payment Request", trailing: "Done", stack: true,
+      body: `
+        <div class="req-qr">
+          <div class="req-qr-amount">${esc(`${trimmedKas(request.amountSompi ?? amountSompi() ?? 0n)} ${KAS_UNIT}`)}</div>
+          ${memo ? `<p class="muted center-text req-qr-memo">${esc(memo)}</p>` : ""}
+          <canvas class="req-qr-code" aria-label="Payment request QR code"></canvas>
+          <p class="muted small center-text">Scan it with an iPhone's camera to pay in KaPay, with everything filled in.</p>
+        </div>`,
+    });
+    import("qrcode")
+      .then(({ default: QRCode }) => QRCode.toCanvas(handle.panel.querySelector(".req-qr-code"), paymentRequestKaPayLink(request), { width: 520, margin: 1, color: { dark: "#000000", light: "#ffffff" } }))
+      .catch(() => toast("Couldn't draw the QR code."));
   };
 
   flow.go("destination");

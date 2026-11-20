@@ -114,8 +114,10 @@ const valueOf = (v) => (typeof v === "function" ? v() : v);
 
 export function showStep({
   screen = "send-step", title = "", question = "", bodyHtml = "", className = "", onBack = null, onCancel,
-  continueTitle = "Continue", canContinue = true, onContinue, direction = null,
+  continueTitle = "Continue", canContinue = true, onContinue, direction = null, secondary = null,
 }) {
+  // `secondary`: { title, iconHtml, onClick } - a second full-width button under Continue, greyed out
+  // with it (KaPay iOS 0e05064 SendContinueButton's secondary: Request Payment's Show Request As QR)
   const first = !onBack;
   render(`
     <section class="ss-screen ss-step ${first ? "ss-first" : ""} ${className}" ${direction ? `data-enter="${direction}"` : ""}>
@@ -125,9 +127,12 @@ export function showStep({
         ${first ? "" : '<button type="button" class="ss-cancel" id="ss-cancel">Cancel</button>'}
       </header>
       <div class="ss-body" id="ss-body">${question ? stepQuestionHtml(question) : ""}${bodyHtml}</div>
-      <div class="ss-bar">
-        ${first ? '<button type="button" class="ss-bar-cancel" id="ss-bar-cancel">Cancel</button>' : ""}
-        <button type="button" class="ss-continue" id="ss-continue">${esc(valueOf(continueTitle))}</button>
+      <div class="ss-bar ${secondary ? "ss-bar-two" : ""}">
+        <div class="ss-bar-row">
+          ${first ? '<button type="button" class="ss-bar-cancel" id="ss-bar-cancel">Cancel</button>' : ""}
+          <button type="button" class="ss-continue" id="ss-continue">${esc(valueOf(continueTitle))}</button>
+        </div>
+        ${secondary ? `<button type="button" class="ss-secondary" id="ss-secondary">${secondary.iconHtml || ""}<span>${esc(secondary.title)}</span></button>` : ""}
       </div>
     </section>`, screen);
   const el = app.querySelector(".ss-screen");
@@ -137,8 +142,11 @@ export function showStep({
   el.querySelector("#ss-cancel")?.addEventListener("click", () => onCancel?.());
   el.querySelector("#ss-bar-cancel")?.addEventListener("click", () => onCancel?.());
   button.addEventListener("click", () => { if (!button.disabled) onContinue?.(); });
+  const second = el.querySelector("#ss-secondary");
+  second?.addEventListener("click", () => { if (!second.disabled) secondary.onClick?.(); });
   const refresh = () => {
     button.disabled = !valueOf(canContinue);
+    if (second) second.disabled = button.disabled;
     button.textContent = unitText(String(valueOf(continueTitle) ?? ""));
   };
   refresh();

@@ -35,6 +35,16 @@ body.tab #app:has(> .ss-screen) { height: calc(100vh - 48px - var(--dock-h, 0px)
 
 /* iOS SendContinueButton: an accent capsule pinned at the bottom, beside Cancel on a first step. */
 .ss-bar { flex: 0 0 auto; display: flex; gap: 10px; padding: 8px 18px 14px; background: var(--bg); }
+.ss-bar-row { flex: 1 1 auto; display: flex; gap: 10px; min-width: 0; }
+.ss-bar-two { flex-direction: column; }
+/* a second button under Continue (Show Request As QR) */
+.ss-secondary {
+  height: 50px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px;
+  border: 1px solid rgba(112,199,186,.35); border-radius: 999px; background: var(--panel-2); color: var(--text);
+  font: inherit; font-size: 16px; font-weight: 650; cursor: pointer;
+}
+.ss-secondary svg { width: 18px; height: 18px; }
+.ss-secondary:disabled { opacity: .4; cursor: default; }
 .ss-continue, .ss-bar-cancel { flex: 1 1 0; height: 50px; border-radius: 999px; font: inherit; font-size: 16px; font-weight: 650; cursor: pointer; padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ss-continue { border: 0; background: var(--kaspa); color: #000; }
 .ss-continue:disabled { background: var(--kaspa) !important; color: #000 !important; opacity: .4 !important; cursor: default; }
@@ -209,6 +219,12 @@ body.tab .ss-key { height: 54px; }
 .ss-label { color: var(--muted); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .3px; }
 .req-share { align-self: center; display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 999px; background: rgba(112,199,186,.15); color: var(--kaspa-ink); font-size: 14px; font-weight: 650; }
 .req-share:disabled { background: rgba(112,199,186,.15) !important; color: var(--kaspa-ink) !important; opacity: .5 !important; }
+/* Show Request As QR (KaPay iOS 0e05064 PaymentRequestQRSheet): the amount, the memo, the code on
+   white, and what scanning it does. */
+.req-qr { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 6px 4px 12px; }
+.req-qr-amount { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; overflow-wrap: anywhere; }
+.req-qr-memo { margin: -6px 0 0; overflow-wrap: anywhere; }
+.req-qr-code { width: 240px !important; height: 240px !important; padding: 14px; border-radius: 16px; background: #fff; }
 .req-share svg { width: 15px; height: 15px; }
 .req-memo-card { background: var(--panel); border-radius: 14px; padding: 12px 14px; }
 .req-memo-card .req-memo { min-height: 0; padding: 0; }

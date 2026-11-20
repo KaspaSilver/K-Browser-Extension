@@ -227,6 +227,27 @@ async function verifiedFreshQuantumSlot(account) {
   return { index, address };
 }
 
+/**
+ * A fresh quantum-safe slot, probed and recorded in one step: the chain's end moves past it and the
+ * address is cached before anyone else may probe. A send's change, a payment request's Fresh Address
+ * and Generate New Address each claim theirs this way, one at a time across KaPay's windows, so two
+ * of them can never get the same address (KaPay iOS 0e05064 claimFreshChangeSlot: a send's change
+ * slot is held until it is recorded, and a request made meanwhile takes the next one). `unhide`:
+ * the slot is taken out of the hidden list too (Generate New Address).
+ */
+async function claimFreshQuantumSlot(account, { unhide = false } = {}) {
+  const claim = async () => {
+    const { index, address } = await verifiedFreshQuantumSlot(account);
+    if (!address) return { index, address };
+    const now = await spendingState(account.id);
+    await saveSpendingState(account.id, unhide ? { ...boundPatchFor(index, now), hidden: now.hidden.filter((i) => i !== index) } : boundPatchFor(index, now));
+    await cacheSpendingAddress(account.id, index, address);
+    return { index, address };
+  };
+  const locks = globalThis.navigator?.locks;
+  return locks?.request ? locks.request(`kapay-fresh-slot-${account.id}`, claim) : claim();
+}
+
 /** A quantum-safe address that has spent: its key is on chain for good (the shield comes off). */
 async function markQuantumSpent(accountId, address) {
   const lowered = String(address || "").toLowerCase();
@@ -903,20 +924,17 @@ export async function send({ source, destination, amountKas = null, tipKas = "0"
     if (index != null) {
       const account = await accountSecretsById(from.accountId);
       // a fresh quantum slot, checked on chain first (iOS da2c8e2)
-      try { fresh = await verifiedFreshQuantumSlot(account); } catch { fresh = null; }
+      // claimed and recorded in one step, so a request made meanwhile can't hand it out
+      try { fresh = await claimFreshQuantumSlot(account); } catch { fresh = null; }
       if (!fresh?.address) fresh = null;
       // a quantum source's change never goes back to the key its spend reveals (IOS-104)
       if (!fresh && from.quantum) throw new Error(QUANTUM_CHANGE_UNAVAILABLE);
     }
   }
-  if (fresh) {
-    // The change slot is recorded before anything is submitted (its chain's end and the address
-    // cache, as reserveFreshSpendingAddress does): a popup closed mid-send, or a chained send that
-    // fails partway, would otherwise leave change on a slot nothing lists, and the balance looks
-    // gone. Only the primary waits for the node to take it.
-    await saveSpendingState(from.accountId, boundPatchFor(fresh.index, await spendingState(from.accountId)));
-    await cacheSpendingAddress(from.accountId, fresh.index, fresh.address);
-  }
+  // The change slot was recorded as it was claimed, before anything is submitted (its chain's end
+  // and the address cache): a popup closed mid-send, or a chained send that fails partway, would
+  // otherwise leave change on a slot nothing lists, and the balance looks gone. Only the primary
+  // waits for the node to take it.
   const build = (changeAddress) => spendFrom(from.address, (engine) => sendKaspa({
     ...engine, rpc: node, privateKey: from.privateKeyHex, sourceAddress: from.address,
     destinationAddress: destination, amountKas: String(amountKas), feeKas: String(tipKas || "0"),
@@ -1411,9 +1429,8 @@ export async function nextFreshSpendingAddress() {
  *  chain moves past it, so nothing hands it out again (iOS reserveFreshSpendingAddresses). */
 export async function reserveFreshSpendingAddress() {
   const { account } = await activeState();
-  const { index, address } = await verifiedFreshQuantumSlot(account);
-  await saveSpendingState(account.id, boundPatchFor(index, await spendingState(account.id)));
-  await cacheSpendingAddress(account.id, index, address);
+  const { index, address } = await claimFreshQuantumSlot(account);
+  if (!address) throw new Error("Couldn't make a new address.");
   return { index, address, accountId: account.id };
 }
 
@@ -1444,10 +1461,7 @@ export async function generateSpendingAddress(forAccount = null) {
       }
     }
   }
-  const { index, address } = await verifiedFreshQuantumSlot(account);
-  const now = await spendingState(account.id);
-  await saveSpendingState(account.id, { ...boundPatchFor(index, now), hidden: now.hidden.filter((i) => i !== index) });
-  await cacheSpendingAddress(account.id, index, address);
+  const { index } = await claimFreshQuantumSlot(account, { unhide: true });
   return index;
 }
 
@@ -1735,14 +1749,10 @@ export async function transferDomain({ domain, assetId, toAddress, priorityFeeSo
   if (source?.kind === "spending") {
     const state = await spendingState(engine.accountId);
     if (source.index === state.activeIndex) {
-      const slot = await verifiedFreshQuantumSlot(await accountSecretsById(engine.accountId));
-      if (slot?.address) {
-        fresh = { accountId: engine.accountId, index: slot.index, address: slot.address };
-        // recorded before the commit goes out, like a send's change slot: a closed popup mid-transfer
-        // still finds the change
-        await saveSpendingState(fresh.accountId, boundPatchFor(fresh.index, await spendingState(fresh.accountId)));
-        await cacheSpendingAddress(fresh.accountId, fresh.index, fresh.address);
-      }
+      // claimed and recorded before the commit goes out, like a send's change slot: a closed popup
+      // mid-transfer still finds the change
+      const slot = await claimFreshQuantumSlot(await accountSecretsById(engine.accountId));
+      if (slot?.address) fresh = { accountId: engine.accountId, index: slot.index, address: slot.address };
     }
   }
   // The primary follows its change once the commit is out or may be (KaPay iOS 2da5f4b), whatever
