@@ -149,7 +149,8 @@ export function showKachatMarket({ onBack = null, search = "", scroll = 0 } = {}
   if (onBack) $("#back").onclick = onBack;
   // .kachat has no title: the backup banner sits under the bar (KaPay iOS 953b255)
   bindBackupBanner(() => again());
-  $("#how").onclick = () => showHowItWorks(isLive());
+  // About .kachat, full screen (KaPay iOS e188209: it was a half sheet)
+  $("#how").onclick = () => { const top = at(); live.hub.onChange = null; showAboutKachat({ onBack: () => again(top) }); };
   const scroller = app.querySelector(".km");
   if (scroller) scroller.scrollTop = scroll;
 
@@ -289,27 +290,86 @@ function showKachatPage(id, { onBack, scroll = 0 }) {
 
 // --- How it works (sheet) ------------------------------------------------------------------
 
-function showHowItWorks(isLive = false) {
+// --- About .kachat (KaPay iOS e188209 KachatHelpView) -------------------------------------------
+// The .kachat tab's "?" and Settings > Help > .kachat Names Guide: two cards, How It Works and
+// Pricing, each its own page.
+
+// leaf / network (SF Symbols)
+const ABOUT_ICONS = {
+  leaf: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15"/><path d="M5 19 13 11"/></svg>',
+  network: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M12 7.2v4.3M12 11.5l-5.6 5.8M12 11.5l5.6 5.8"/></svg>',
+};
+
+/** About .kachat: How It Works and Pricing as cards. `onBack`: where Back goes; `screen`: the
+ *  screen name, so the dock keeps the tab it was opened from ("settings" from Settings > Help). */
+export function showAboutKachat({ onBack, screen = "kachat:about" }) {
+  const again = () => showAboutKachat({ onBack, screen });
+  const card = (id, icon, title, detail) => `
+    <button class="conn-card about-card" data-about="${id}">
+      <span class="conn-card-icon">${icon}</span>
+      <span class="conn-card-text"><span class="conn-card-title">${esc(title)}</span><span class="muted small">${esc(detail)}</span></span>
+      ${ICONS.chevron}
+    </button>`;
+  render(`
+    ${navHeader({ title: "About .kachat" })}
+    <section class="screen settings">
+      <div class="conn-cards">
+        ${card("how", SYMBOLS.question, "How It Works", "Claim, list, buy and make offers: what each one does.")}
+        ${card("pricing", SYMBOLS.tag, "Pricing", "What a name costs, and where the KAS goes.")}
+      </div>
+    </section>`, screen);
+  dock.remember(again);
+  $("#back").onclick = onBack;
+  app.querySelector('[data-about="how"]').onclick = () => showHowItWorks({ onBack: again, screen });
+  app.querySelector('[data-about="pricing"]').onclick = () => showPricing({ onBack: again, screen });
+}
+
+function showHowItWorks({ onBack, screen }) {
   const rows = [
-    ["atPlus", "Claim", "Pick a free name and register it on Kaspa. It's yours: your name in chats, your profile, your link."],
+    ["atPlus", "Claim", "Pick a free name and register it on Kaspa. It's yours: your name, your profile, your link."],
+    ["renew", "Renew", "Renew before it expires to keep it. An expired name waits for its owner to renew it for a while before anyone else can claim it."],
     ["tag", "List", "Set a price. The name waits in an on-chain covenant, not with KaChat or anyone else, until someone buys it or you take it back."],
     ["cart", "Buy", "Pay the listed price. The payment reaches the seller and the name reaches you in the same transaction - both happen, or neither does."],
     ["hand", "Offer", "Name your own price. Your KAS waits on chain until the seller accepts, you withdraw the offer, or it expires."],
     ["shield", "Trustless", "No middleman and no escrow account: Kaspa's own rules enforce every sale."],
   ];
-  openPanel({
-    title: "How .kachat works",
-    trailing: "Done",
-    body: `
-      <div class="km-card km-how">
-        ${rows.map(([icon, title, detail]) => `
-          <div class="km-how-row">
-            <span class="accent km-how-icon">${SYMBOLS[icon]}</span>
-            <span class="tx-meta"><span class="strong small">${esc(title)}</span><span class="muted small">${esc(detail)}</span></span>
-          </div>`).join("")}
+  render(`
+    ${navHeader({ title: "How It Works" })}
+    <section class="screen settings">
+      ${rows.map(([icon, title, detail]) => `
+        <div class="km-card about-step">
+          <span class="accent km-how-icon">${SYMBOLS[icon]}</span>
+          <span class="tx-meta"><span class="strong">${esc(title)}</span><span class="muted small">${esc(detail)}</span></span>
+        </div>`).join("")}
+      <p class="form-footer">${!isLive() ? "Nothing here is live yet." : IS_TESTNET ? "Live on Testnet: names, prices and payments here use TKAS on testnet-10. Mainnet names are live on Mainnet." : "Live on Mainnet: names, prices and payments here are real KAS."}</p>
+    </section>`, screen);
+  dock.remember(() => showHowItWorks({ onBack, screen }));
+  $("#back").onclick = onBack;
+}
+
+function showPricing({ onBack, screen }) {
+  const p = live.pricingInfo();
+  const info = (icon, title, text) => `
+    <div class="km-card about-step">
+      <span class="accent km-how-icon">${icon}</span>
+      <span class="tx-meta"><span class="strong">${esc(title)}</span><span class="muted small">${esc(text)}</span></span>
+    </div>`;
+  render(`
+    ${navHeader({ title: "Pricing" })}
+    <section class="screen settings">
+      <div class="km-card about-prices">
+        <div class="about-price-row about-price-head"><span>Name length</span><span>Claim</span><span>Renew</span></div>
+        ${p.rows.map((r) => `<div class="about-price-row"><span>${esc(r.length)}</span><span class="mono-digits">${esc(r.claim)}</span><span class="mono-digits">${esc(r.renew)}</span></div>`).join("")}
+        <p class="muted small about-price-note">${esc(`Claim pays for the first ${p.onePeriod}. Renew pays for each one after that.`)}</p>
       </div>
-      <p class="form-footer">${!isLive ? "Nothing here is live yet." : IS_TESTNET ? "Live on Testnet: names, prices and payments here use TKAS on testnet-10. Mainnet names are live on Mainnet." : "Live on Mainnet: names, prices and payments here are real KAS."}</p>`,
-  });
+      ${info(ABOUT_ICONS.leaf, "Where the price goes", "The price goes to the miners - KaChat takes nothing.")}
+      ${info(SYMBOLS.lock, "Locked, not spent", `${p.locked} stays locked with your name while you hold it (bond + registry deposit). You get it back when you release the name.`)}
+      ${info(SYMBOLS.calendar, "Paying ahead", `You can pay for up to ${p.maxPeriods} at a time.`)}
+      ${info(SYMBOLS.cart, "Buying and selling", "The seller gets the full listed price: there's no marketplace fee.")}
+      ${info(ABOUT_ICONS.network, "Network fee", "Every claim, renewal, sale and offer also pays a small Kaspa network fee, shown before you confirm.")}
+    </section>`, screen);
+  dock.remember(() => showPricing({ onBack, screen }));
+  $("#back").onclick = onBack;
 }
 
 // --- Listing (iOS KachatListingDetailView) --------------------------------------------------

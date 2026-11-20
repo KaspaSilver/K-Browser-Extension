@@ -75,6 +75,10 @@ export function quantumShieldHtml(row) {
 }
 
 // SF Symbols these screens use, drawn to match.
+// shield.fill / circle.grid.2x2.fill: Address Visibility's two chains
+const SHIELD_FILL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.5v6c0 4.8 3.2 8.9 7.5 10 4.3-1.1 7.5-5.2 7.5-10v-6Z" fill="currentColor"/></svg>';
+const GRID_FILL = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="7.5" r="3.6" fill="currentColor"/><circle cx="16.5" cy="7.5" r="3.6" fill="currentColor"/><circle cx="7.5" cy="16.5" r="3.6" fill="currentColor"/><circle cx="16.5" cy="16.5" r="3.6" fill="currentColor"/></svg>';
+
 const SF = {
   // shield: Generate Quantum-Resistant Address
   shield: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 5 6v5.4c0 4.4 3 8.2 7 9.4 4-1.2 7-5 7-9.4V6Z"/></svg>',
@@ -975,6 +979,20 @@ function showVisibility({ onBack }) {
     return `${rows.filter((r) => !r.hidden).length} of ${rows.length} shown`;
   };
 
+  /** A chain's KAS, every address of it counted (KaPay iOS 3d126db): null until the list is in. */
+  const chainSompi = (quantum) => (state.list ? (state.list.rows || []).filter((r) => Boolean(r.quantum) === quantum).reduce((sum, r) => sum + BigInt(r.balanceSompi || 0n), 0n) : null);
+  // a chain's card (KaPay iOS 3d126db, connection-style): its icon, "n of m shown", its KAS
+  const chainCard = (chain, icon, title, quantum) => {
+    const sompi = chainSompi(quantum);
+    return `
+      <button class="conn-card" data-chain="${chain}">
+        <span class="conn-card-icon">${icon}</span>
+        <span class="conn-card-text"><span class="conn-card-title">${esc(title)}</span><span class="conn-card-summary">${esc(shownText(quantum))}</span></span>
+        <span class="conn-card-trailing ${sompi != null && sompi > 0n ? "accent" : "muted"}">${sompi == null ? "" : `${esc(groupedKas8(sompi))} KAS`}</span>
+        ${ICONS.chevron}
+      </button>`;
+  };
+
   function paintCards() {
     render(`
       <header class="navbar form-bar">
@@ -983,17 +1001,9 @@ function showVisibility({ onBack }) {
         <button class="bar-text strong" id="done">Done</button>
       </header>
       <div class="manage-scroll">
-        <div class="domains-grid your-domains-grid">
-          <button class="glass domains-service" data-chain="quantum">
-            <span class="q-shield q-safe">${SHIELD.replace('width="13" height="13"', 'width="28" height="28"')}</span>
-            <span class="strong">Quantum Addresses</span>
-            <span class="domains-count-pill">${esc(shownText(true))}</span>
-          </button>
-          <button class="glass domains-service" data-chain="legacy">
-            <span class="accent">${SF.creditcard.replace('width="40" height="40"', 'width="28" height="28"')}</span>
-            <span class="strong">Non-Quantum Addresses</span>
-            <span class="domains-count-pill">${esc(shownText(false))}</span>
-          </button>
+        <div class="conn-cards vis-cards">
+          ${chainCard("quantum", SHIELD_FILL, "Quantum Addresses", true)}
+          ${chainCard("legacy", GRID_FILL, "Non-Quantum Addresses", false)}
         </div>
         <button class="ghost vis-hide-all" id="hide-all">Hide All</button>
       </div>`, "visibility");

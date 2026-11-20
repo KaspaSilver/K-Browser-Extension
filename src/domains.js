@@ -1,10 +1,10 @@
 // Your Domains - iOS KNSDomainsListView, KNSDomainDetailView and KNSDomainSendView.
 //
-//   cards    four Kaspa Hub style squares (iOS debd6fd, 2ee667c): .kachat, .kas (KNS), .k (dotk),
-//            .kaspa (Kaspa Names), each with who runs it and how many names you hold there (a
-//            dash until the answer is in). A card opens that service's own list.
-//   list     the names as teal cards; an outside service's list pins "Get a <ending> domain at
-//            <site>", which opens that service's site - KaChat creates only its own .kachat names.
+//   cards    a card per ending (KaPay iOS 3d126db; squares before, iOS debd6fd): .kachat, .kas
+//            (KNS), .k (dotk), .kaspa (Kaspa Names), each with who runs it and how many names you
+//            hold there (a dash until the answer is in). A card opens that service's own list.
+//   list     the names as teal cards; .kachat's pins Claim a Name (the .kachat tab). The outside
+//            services' "Get a <ending> domain at <site>" buttons are gone (KaPay iOS 3d126db).
 //            .kas cards carry "Primary"; a .kaspa name still settling carries "Settling".
 //   detail   (.kas) the card, Asset ID, Set as Primary / Primary Domain, Status: Listed, Send
 //   send     recipient (address or a name on any service, with "Other domains"), Normal /
@@ -65,12 +65,6 @@ export function showDomains({ address, onBack, atCards = false, service = null }
     .catch(() => {});
   loadPending();
 
-  const getNameButton = (tld) => {
-    const info = names.service(tld);
-    if (!info?.site) return "";
-    return `<a class="get-domain" href="${esc(info.site)}" target="_blank" rel="noopener noreferrer">Get a ${esc(info.suffix)} domain at ${esc(info.siteName)}</a>`;
-  };
-
   const kasTab = () => {
     const list = state.data?.domains || [];
     const pending = (state.pending || []).map(pendingCardHtml).join("");
@@ -121,13 +115,13 @@ export function showDomains({ address, onBack, atCards = false, service = null }
     return state.owned?.[tld] ? state.owned[tld].length : null;
   };
   const cardsHtml = () => `
-    <div class="domains-grid your-domains-grid">${names.NAME_SERVICES.map((svc) => {
+    <div class="conn-cards">${names.NAME_SERVICES.map((svc) => {
       const count = countOf(svc.tld);
-      return `<button class="glass domains-service" data-tab="${svc.tld}">
-        <span class="accent">${ICONS.atCircle}</span>
-        <span class="strong">${esc(svc.suffix)}</span>
-        <span class="muted tiny">${esc(svc.serviceName)}</span>
-        <span class="domains-count-pill">${count == null ? "-" : esc(String(count))}</span>
+      return `<button class="conn-card" data-tab="${svc.tld}">
+        <span class="conn-card-icon">${ICONS.at}</span>
+        <span class="conn-card-text"><span class="conn-card-title">${esc(svc.suffix)}</span><span class="conn-card-summary">${esc(svc.serviceName)}</span></span>
+        <span class="domains-count-pill">${count == null ? "–" : esc(String(count))}</span>
+        ${ICONS.chevron}
       </button>`;
     }).join("")}</div>`;
 
@@ -145,9 +139,7 @@ export function showDomains({ address, onBack, atCards = false, service = null }
     render(`
       ${navHeader({ title: names.service(selectedTab)?.suffix || "Your Domains" })}
       <section class="screen domains" id="domains-body">${body}</section>
-      ${selectedTab === "kachat"
-        ? (liveTab?.showsInscribe ? '<div class="get-domain-bar"><button class="get-domain" id="inscribe">Claim a Name</button></div>' : "")
-        : `<div class="get-domain-bar">${getNameButton(selectedTab)}</div>`}`, "domains");
+      ${selectedTab === "kachat" && liveTab?.showsInscribe ? '<div class="get-domain-bar"><button class="get-domain" id="inscribe">Claim a Name</button></div>' : ""}`, "domains");
     remember(() => paint());
     // back to the cards
     $("#back").onclick = () => { selectedTab = null; paint(); };

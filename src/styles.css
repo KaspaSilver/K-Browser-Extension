@@ -1203,11 +1203,14 @@ body.dock-on #app[data-screen="settings"] .form > * { flex-shrink: 0; }
 /* --- The Wallet tab, as KaChat's (KaPay iOS 953b255) ------------------------------------------ */
 /* WalletBalanceCard: the total, its worth, then chatting and spending; an accent gradient. */
 .wallet-balance-card {
-  display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 22px;
+  display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 22px; width: 100%;
+  color: var(--text); font: inherit; font-weight: 400; text-align: left; cursor: pointer;
   background: linear-gradient(135deg, rgba(112, 199, 186, .32), rgba(112, 199, 186, .08));
   border: .8px solid rgba(112, 199, 186, .35);
 }
 .wallet-balance-head { display: flex; flex-direction: column; gap: 4px; }
+.wallet-balance-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.wallet-manage-hint { font-size: 12px; font-weight: 600; color: var(--kaspa); white-space: nowrap; }
 .wallet-balance-total {
   align-self: flex-start; background: transparent; color: var(--text); padding: 0; border-radius: 0;
   font-size: 30px; font-weight: 800; letter-spacing: -.5px; font-variant-numeric: tabular-nums;
@@ -1220,16 +1223,6 @@ body.dock-on #app[data-screen="settings"] .form > * { flex-shrink: 0; }
 .wallet-actions { display: flex; gap: 12px; }
 .wallet-action { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; background: transparent; color: var(--text); padding: 0; font-weight: 400; font-size: 13px; }
 .wallet-action-circle { width: 56px; height: 56px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--kaspa); color: #000; }
-/* The Manage Addresses and Chatting Address squares. */
-.address-squares { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.address-square {
-  aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-  padding: 0 10px; border-radius: 18px; background: rgba(44, 44, 46, .72); border: .8px solid rgba(255, 255, 255, .18);
-  color: var(--text); font-size: 14px; font-weight: 650; text-align: center;
-}
-@media (prefers-color-scheme: light) { .address-square { background: rgba(255, 255, 255, .8); border-color: rgba(0, 0, 0, .08); } }
-.address-square-icon { width: 48px; height: 48px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--kaspa); background: rgba(118, 118, 128, .24); }
-.address-square-icon svg { width: 22px; height: 22px; }
 
 /* --- Onboarding: Advanced create; the passphrase preview's balance and found addresses --------- */
 .advanced-create { font-size: 13px; padding: 6px; }
@@ -1260,3 +1253,29 @@ body.dock-on #app[data-screen="settings"] .form > * { flex-shrink: 0; }
 .bal-card-label { font-size: 15px; color: var(--muted); }
 .bal-card-amount { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
 .bal-card-detail { font-size: 15px; color: var(--muted); }
+
+/* Connection Settings, Your Domains and Address Visibility as cards (KaPay iOS e188209 / 3d126db):
+   an accent icon in a circle, the title, a one-line summary, a chevron. */
+.conn-cards { display: flex; flex-direction: column; gap: 12px; }
+.conn-card {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 16px; border-radius: 18px; text-align: left;
+  background: var(--panel); color: var(--text); font: inherit; font-weight: 400; cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18);
+}
+.conn-card-icon { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--kaspa); background: color-mix(in srgb, var(--kaspa) 15%, transparent); }
+.conn-card-icon svg { width: 20px; height: 20px; }
+.conn-card-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.conn-card-title { font-size: 16px; font-weight: 650; }
+.conn-card-summary { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn-card-trailing { flex: 0 0 auto; font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; }
+.conn-card > svg:last-child { flex: 0 0 auto; color: var(--muted); }
+
+/* About .kachat (KaPay iOS e188209 KachatHelpView): a step or note per card, the price table. */
+.about-card .conn-card-text .muted { white-space: normal; }
+.about-step { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; margin-bottom: 12px; }
+.about-step .tx-meta { gap: 4px; }
+.about-prices { padding: 6px 0 4px; margin-bottom: 12px; }
+.about-price-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; padding: 10px 16px; border-top: .5px solid var(--line); font-size: 14px; }
+.about-price-row > span:not(:first-child) { text-align: right; }
+.about-price-head { border-top: 0; font-size: 11px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); }
+.about-price-note { margin: 0; padding: 10px 16px 8px; border-top: .5px solid var(--line); }

@@ -87,6 +87,7 @@ export async function showSettings(opts) {
         ${appSettings ? "" : rowHtml("sites", ICONS.safari, "Connected Sites")}
         ${rowHtml("connection", ICONS.antenna, "Connection")}
         ${rowHtml("customization", ICONS.paintbrush, "Customization")}
+        ${rowHtml("help", HELP_ICON, "Help")}
         ${rowHtml("security", ICONS.lockShieldSmall, "Security")}
       </div>
       ${onLogOut ? `<div class="glass list">
@@ -105,6 +106,7 @@ export async function showSettings(opts) {
   const remove = $("#delete-account");
   if (remove) remove.onclick = () => confirmDeleteAccount({ onBack: back, onDelete });
   $("#customization").onclick = () => showCustomization({ onBack: back });
+  $("#help").onclick = () => showHelp({ onBack: back });
   $("#security").onclick = () => showSecurity({ onBack: back, appSettings });
   $("#connection").onclick = () => showConnectionHub({ onBack: back });
   const sites = $("#sites");
@@ -115,6 +117,28 @@ export async function showSettings(opts) {
   if (name) name.onclick = () => showAccountName({ onBack: back });
   const backup = $("#backup");
   if (backup) backup.onclick = () => showBackUpAccount({ onBack: back });
+}
+
+// questionmark.circle
+const HELP_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.3-2.5 3.8M12 17h.01"/></svg>';
+
+/** Settings > Help (moved here from the Wallet tab, KaPay iOS 3d126db): the guides. iOS's kUSDT
+ *  Guide has no counterpart here. */
+function showHelp({ onBack }) {
+  const again = () => showHelp({ onBack });
+  render(`
+    ${navHeader({ title: "Help" })}
+    <section class="screen settings">
+      <div class="conn-cards">
+        <button class="conn-card" id="kachat-guide">
+          <span class="conn-card-icon">${ICONS.at}</span>
+          <span class="conn-card-text"><span class="conn-card-title">.kachat Names Guide</span><span class="muted small">Claim a .kachat name, make it your name, and keep it.</span></span>
+          ${ICONS.chevron}
+        </button>
+      </div>
+    </section>`, "settings");
+  $("#back").onclick = onBack;
+  $("#kachat-guide").onclick = () => import("./market.js").then((m) => m.showAboutKachat({ onBack: again, screen: "settings" }));
 }
 
 /** View 12 or 24 Words, behind the wallet password (iOS unlockSeedPhrase's biometric gate). */
@@ -455,15 +479,58 @@ function normalizeHttpsUrl(raw, fallback) {
   }
 }
 
-// iOS ConnectionSettingsView, wallet-only: of its underline tabs (Indexer, Node, Translation,
-// Domains, Explorer) the wallet keeps Node, Domains and Explorer - the indexers and the
-// translation service are for chats and KaPosts. As on iOS, picking a node applies at once,
-// the IP Address Book saves as you edit it, and Save stores the URL fields.
+// iOS ConnectionSettingsView, wallet-only, as cards since KaPay iOS e188209: Node, Domains and
+// Explorer (iOS's Push and Trestly cards have no counterpart here), each opening its own screen with
+// the old tab's fields. As on iOS, picking a node applies at once (Node has no Save), the IP Address
+// Book saves as you edit it, and Save stores a screen's URL fields and goes back.
 const CONNECTION_TABS = [["node", "Node"], ["domains", "Domains"], ["explorer", "Explorer"]];
 const HTTPS_REQUIRED = "Use https. Unencrypted connections are not supported.";
 let connectionTab = "node";
 
+// server.rack / at / safari
+const CONNECTION_CARD_ICONS = {
+  node: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="6.5" rx="1.6"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="1.6"/><path d="M7 7.3h.01M7 16.8h.01M11 7.3h5M11 16.8h5"/></svg>',
+  domains: ICONS.at,
+  explorer: ICONS.safari,
+};
+
+/** A connection card's one-line summary (iOS): the node in use, or the host a URL points at. */
+async function connectionSummary(id) {
+  const host = (url) => { try { return new URL(url).host || "Not set"; } catch { return "Not set"; } };
+  if (id === "node") {
+    const pinned = getEndpoint("trustedNode");
+    if (!pinned) return "Automatic Scan";
+    const book = (await settings())[BOOK_KEY];
+    return (Array.isArray(book) ? book : []).find((entry) => entry.address === pinned)?.label || pinned;
+  }
+  if (id === "domains") return getEndpoint("kachatNamesIndexer") ? host(getEndpoint("kachatNamesIndexer")) : "Not set";
+  return host(getEndpoint("kaspaApi"));
+}
+
+/** Connection Settings: a card per part (iOS e188209), each opening its screen. */
 async function showConnectionSettings({ onBack }) {
+  const again = () => showConnectionSettings({ onBack });
+  const summaries = await Promise.all(CONNECTION_TABS.map(([id]) => connectionSummary(id).catch(() => "")));
+  render(`
+    ${navHeader({ title: "Connection Settings" })}
+    <section class="screen settings">
+      <div class="conn-cards">
+        ${CONNECTION_TABS.map(([id, title], i) => `
+          <button class="conn-card" data-conn="${id}">
+            <span class="conn-card-icon">${CONNECTION_CARD_ICONS[id]}</span>
+            <span class="conn-card-text"><span class="conn-card-title">${esc(title)}</span><span class="conn-card-summary">${esc(summaries[i] || "")}</span></span>
+            ${ICONS.chevron}
+          </button>`).join("")}
+      </div>
+    </section>`, "settings");
+  $("#back").onclick = onBack;
+  for (const card of app.querySelectorAll("[data-conn]")) {
+    card.onclick = () => { connectionTab = card.dataset.conn; showConnectionSection({ onBack: again }); };
+  }
+}
+
+/** One card's screen: Node, Domains or Explorer (`connectionTab`). */
+async function showConnectionSection({ onBack }) {
   // Each network keeps its own address book (iOS ConnectionProfile.savedNodeAddresses).
   const book = (await settings())[BOOK_KEY];
   const draft = {
@@ -595,12 +662,9 @@ async function showConnectionSettings({ onBack }) {
     render(`
       <header class="navbar form-bar">
         <button class="nav-back" id="back" aria-label="Back">${ICONS.back}<span>Back</span></button>
-        <div class="nav-title">Connection Settings</div>
-        <button class="bar-text strong" id="save">Save</button>
+        <div class="nav-title">${esc(CONNECTION_TABS.find(([id]) => id === connectionTab)?.[1] || "Connection Settings")}</div>
+        ${connectionTab === "node" ? "<span></span>" : '<button class="bar-text strong" id="save">Save</button>'}
       </header>
-      <div class="underline-tabs" role="tablist" aria-label="Connection">
-        ${CONNECTION_TABS.map(([id, title]) => `<button role="tab" data-ctab="${id}" aria-selected="${id === connectionTab}">${esc(title)}</button>`).join("")}
-      </div>
       <section class="form">
         ${connectionTab === "node" ? nodeTab() : connectionTab === "domains" ? domainsTab() : explorerTab()}
         ${draft.error ? `<div class="form-section"><div class="form-card"><div class="form-row error-text">${esc(draft.error)}</div></div></div>` : ""}
@@ -609,10 +673,6 @@ async function showConnectionSettings({ onBack }) {
     if (form) form.scrollTop = scroll;
 
     $("#back").onclick = onBack;
-    // Save covers every tab: the fields keep their edits while you switch between them.
-    for (const tab of app.querySelectorAll("[data-ctab]")) {
-      tab.onclick = () => { connectionTab = tab.dataset.ctab; draft.error = ""; paint(); };
-    }
 
     const nodeChoice = $("#node-choice");
     if (nodeChoice) nodeChoice.onchange = async () => {
@@ -671,13 +731,14 @@ async function showConnectionSettings({ onBack }) {
       $("#rest-error").textContent = /^http:\/\//i.test(rest.value.trim()) ? HTTPS_REQUIRED : "";
     };
 
-    $("#save").onclick = async () => {
+    const save = $("#save");
+    if (save) save.onclick = async () => {
       const defaultRest = IS_TESTNET ? TESTNET_REST : ENDPOINT_DEFAULTS.kaspaApi;
       const parsed = normalizeHttpsUrl(draft.restApi, defaultRest);
-      if (parsed.error) { draft.error = parsed.error; connectionTab = "explorer"; toast(parsed.error); paint(); return; }
+      if (parsed.error) { draft.error = parsed.error; toast(parsed.error); paint(); return; }
       // blank: the network's default indexer (none on Testnet)
       const indexerParsed = draft.kachatIndexer.trim() ? normalizeHttpsUrl(draft.kachatIndexer, "") : { value: "" };
-      if (indexerParsed.error) { draft.error = indexerParsed.error; connectionTab = "domains"; toast(indexerParsed.error); paint(); return; }
+      if (indexerParsed.error) { draft.error = indexerParsed.error; toast(indexerParsed.error); paint(); return; }
       // A REST API other than api.kaspa.org, or an indexer other than KaChat's, needs the browser's
       // permission to be reached. The request has to come straight from this click, before
       // anything else is awaited - one request for both.

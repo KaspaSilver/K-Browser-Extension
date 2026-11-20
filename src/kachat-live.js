@@ -16,7 +16,7 @@
 // Left out on purpose: iOS's Message button on a name's owner (the wallet has no chats).
 
 import { app, esc, render, $, toast, ICONS, navHeader, unitText, showSheet } from "./ui.js";
-import { KAS_UNIT } from "./net.js";
+import { KAS_UNIT, IS_TESTNET } from "./net.js";
 import { looksLikeName, resolveEverywhere, primaryResolution, notFoundMessage, otherDomainsHtml, bindOtherDomains, splitTypedName } from "./names.js";
 import { sompiFromUserText } from "./amounts.js";
 import * as vault from "./vault.js";
@@ -30,7 +30,7 @@ import {
   createStepFlow, showStep, showSwipeUp, showFeeEditor, SWIPE_UP_LABELS, keypadAmountEntryHtml, paintKeypadAmountEntry,
   bindKeypad, applyKeypadKey, reviewCardHtml, reviewRowHtml,
 } from "./send-steps.js";
-import { paramsExpiresSoonMs, paramsRegisterCost } from "../shared/engine/kachat-names/manifest.js";
+import { paramsExpiresSoonMs, paramsRegisterCost, pinnedRegisterPrices, pinnedRenewPrices } from "../shared/engine/kachat-names/manifest.js";
 import { KachatNamesRegistry } from "../shared/engine/kachat-names/registry.js";
 import { Status, Profile, SocialKind, SocialPlatform, SocialSource } from "../shared/engine/kachat-names/registry-state.js";
 import { normalize, unhex32, p2pkScript, bytesEqual, yearMs, tier } from "../shared/engine/kachat-names/codec.js";
@@ -159,6 +159,25 @@ function periods(count) {
   if (yearlyPeriods()) return n === 1n ? "1 year" : `${n} years`;
   return duration(n * periodMs());
 }
+/** What the About .kachat > Pricing page shows (KaPay iOS e188209 KachatPricingPage): each length's
+ *  claim and renew price - the registry's, else the pinned tables - what stays locked with a name
+ *  (bond + registry deposit, 1 + 1 KAS on mainnet), how many periods can be paid ahead, and the
+ *  words for one period. Prices as "35 KAS" text. */
+export function pricingInfo() {
+  const p = params();
+  const network = IS_TESTNET ? "testnet-10" : "mainnet";
+  const register = p?.registerPrices ?? pinnedRegisterPrices[network] ?? pinnedRegisterPrices.mainnet;
+  const renew = p?.renewPrices ?? pinnedRenewPrices[network] ?? pinnedRenewPrices.mainnet;
+  const lengths = ["1 character", "2 characters", "3 characters", "4 characters", "5 or more characters"];
+  const rows = lengths.slice(0, Math.min(register.length, renew.length)).map((length, i) => ({ length, claim: amount(register[i]), renew: amount(renew[i]) }));
+  return {
+    rows,
+    locked: amount((p?.bond ?? 100_000_000n) + (p?.gapValue ?? 100_000_000n)),
+    maxPeriods: periods(p?.maxYears ?? 2n),
+    onePeriod: periods(1),
+  };
+}
+
 /** What registering `name` costs for its first period (registry v4). */
 function namePrice(name) {
   // Registry v4: fixed prices baked into the pinned templates (the manifest's register table) -

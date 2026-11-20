@@ -301,17 +301,18 @@ function paintHome() {
       <div class="profile-title"><h1>Wallet</h1></div>
       <section class="profile-body">
         ${graceBannerHtml(s)}
-        <div class="wallet-balance-card">
+        <!-- a click opens Manage Addresses; the toolbar balance still copies (KaPay iOS 3d126db) -->
+        <button class="wallet-balance-card" id="total-balance" aria-label="Manage Addresses">
           <div class="wallet-balance-head">
-            <span class="muted">Total Balance</span>
-            <button class="wallet-balance-total" id="total-balance" aria-label="Copy balance">${totalSompi != null ? `${esc(wallet.formatKas(totalSompi, 8))} KAS` : "--"}</button>
+            <span class="wallet-balance-top"><span class="muted">Total Balance</span><span class="wallet-manage-hint">Tap to Manage ›</span></span>
+            <span class="wallet-balance-total">${totalSompi != null ? `${esc(wallet.formatKas(totalSompi, 8))} KAS` : "--"}</span>
             ${fiat ? `<span class="muted">${esc(fiat)}</span>` : ""}
           </div>
           <div class="wallet-balance-parts">
             <div><span class="muted tiny">Chatting</span><span class="strong small mono-digits">${chattingSompi != null ? `${esc(wallet.formatKas(chattingSompi, 8))} KAS` : "--"}</span></div>
             <div><span class="muted tiny">Spending</span><span class="strong small mono-digits">${spendingSompi != null ? `${esc(wallet.formatKas(spendingSompi, 8))} KAS` : "--"}</span></div>
           </div>
-        </div>
+        </button>
         <div class="wallet-actions">
           ${actionButton("send", "Send", ACTION.send)}
           ${actionButton("receive", "Receive", ACTION.receive)}
@@ -322,10 +323,11 @@ function paintHome() {
         ${IS_TESTNET && main ? faucetCardHtml(main) : ""}
         <!-- Which address a send comes from is picked on the send screen (From), so this tab
              doesn't split Main from Spending or have a "primary". -->
-        <div class="address-squares">
-          <button class="address-square" id="manage-addresses"><span class="address-square-icon">${SQUARE.list}</span><span>Manage Addresses</span></button>
-          <button class="address-square" id="chatting-qr" ${main ? "" : "disabled"}><span class="address-square-icon">${SQUARE.qr}</span><span>Chatting Address</span></button>
-        </div>
+        <!-- Chatting Address, Your Domains, Contacts as rows; Manage Addresses is the balance card
+             (KaPay iOS 3d126db) -->
+        <button class="glass nav-row" id="chatting-qr" ${main ? "" : "disabled"}>
+          <span class="nav-row-label">${ICONS.qr}<span>Chatting Address</span></span>${ICONS.chevron}
+        </button>
         <button class="glass nav-row" id="domains">
           <span class="nav-row-label">${ICONS.at}<span>Your Domains</span></span>
           <span class="nav-row-value">${domainCount != null ? esc(String(domainCount)) : ""}</span>${ICONS.chevron}
@@ -339,7 +341,6 @@ function paintHome() {
   $("#dot").onclick = () => toast(s.connection === "ok" ? `Connected to ${wallet.connectedNodeUrl().replace(/^wss:\/\//, "")}` : s.connection === "bad" ? "Can't reach a Kaspa node - retrying" : "Connecting to the Kaspa network…");
   const copyBalance = () => { if (totalSompi != null) copyText(wallet.formatKas(totalSompi, 8), "Balance"); };
   $("#balance").onclick = copyBalance;
-  $("#total-balance").onclick = copyBalance;
   $("#lock").onclick = lockWallet;
   $("#bell").onclick = openBell;
   bindGraceBanner(s);
@@ -358,7 +359,7 @@ function paintHome() {
   // ChangeNOW Swap (KaChat-Desktop Build 217)
   $("#swap").onclick = () => import("./swaps.js").then((m) => m.showSwap());
   if (main) $("#chatting-qr").onclick = () => openChattingQr(s, paintHome);
-  $("#manage-addresses").onclick = () => showManageAddresses({
+  $("#total-balance").onclick = () => showManageAddresses({
     onBack: showHome,
     onChangeIdentity: s.account.imported ? () => { homeState = null; showHome(); } : null,
   });
@@ -390,11 +391,6 @@ const ACTION = {
   receive: stroke('<path d="M12 5v14M6 13l6 6 6-6"/>'),
   request: stroke('<path d="M14 3.5H7.4A1.9 1.9 0 0 0 5.5 5.4v13.2a1.9 1.9 0 0 0 1.9 1.9h9.2a1.9 1.9 0 0 0 1.9-1.9V8Z"/><path d="M14 3.5V8h4.5M9 13h6M9 16.5h4"/>', 22),
   swap: stroke('<path d="M4 8h15M15 4l4 4-4 4"/><path d="M20 16H5M9 12l-4 4 4 4"/>', 22),
-};
-// list.bullet.rectangle / qrcode
-const SQUARE = {
-  list: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="M10 9h7.5M10 12h7.5M10 15h7.5"/><circle cx="6.5" cy="9" r=".6" fill="currentColor"/><circle cx="6.5" cy="12" r=".6" fill="currentColor"/><circle cx="6.5" cy="15" r=".6" fill="currentColor"/></svg>',
-  qr: ICONS.qrBig,
 };
 
 /** Settings' last row (iOS 040f91a): a half sheet with the consequence beside the action. */
