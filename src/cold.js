@@ -26,7 +26,7 @@ import * as vault from "./vault.js";
 import * as dock from "./dock.js";
 import { getLocal, setLocal, removeLocal } from "./browser.js";
 import {
-  app, esc, render, $, toast, copyText, ICONS, navHeader, showQr, showSheet, showAlert, formatKas8,
+  app, esc, render, $, toast, copyText, ICONS, navHeader, showQr, showSheet, showAlert, formatKas8, RECEIVE_NOTES,
 } from "./ui.js";
 import { scanQr } from "./camera.js";
 import { kachatWordmark } from "./market.js";
@@ -481,6 +481,16 @@ async function copyKpub(kpub) {
 
 // iOS ColdStorageKpubQRView: a white page, the kpub's QR (error correction L) in the accent
 // frame, the kpub, what showing it means, "Tap anywhere to copy".
+/** A Cold Storage address's receive screen (KaPay iOS e188209): Kaspa only - Cold Storage can't
+ *  move kUSDT - and its key is on the KasSigner. */
+function coldReceive({ label, address, onBack }) {
+  showQr({
+    heading: "Receive Kaspa", label, address, backLabel: "Close", onBack,
+    privacy: RECEIVE_NOTES.coldStorage,
+    notes: [RECEIVE_NOTES.kaspaOnly, RECEIVE_NOTES.noKusdtCold],
+  });
+}
+
 async function showKpubQr({ account, onBack }) {
   render(`
     <header class="navbar qr-bar">
@@ -622,7 +632,7 @@ function showAccount({ accountId, onBack }) {
     rows: [
       { label: "Rename Address", subtitle: "Gives this address a label of your own.", icon: SF.pencil, onClick: () => renameAddress(entry) },
       { label: "Copy Address", subtitle: "Puts the full address on the clipboard.", icon: SF.doc, onClick: () => copyText(entry.address) },
-      { label: "Show QR Code", subtitle: "Full screen, for scanning with another device.", icon: SF.qrcode, onClick: () => showQr({ title: displayLabel(entry), address: entry.address, backLabel: "Close", onBack: back }) },
+      { label: "Show QR Code", subtitle: "Full screen, for scanning with another device.", icon: SF.qrcode, onClick: () => coldReceive({ label: displayLabel(entry), address: entry.address, onBack: back }) },
       ...(entry.balanceSompi === 0n ? [{
         label: "Hide Address", subtitle: "Removes it from this list. Re-enable it in Address Visibility.", icon: SF.eyeSlash, tint: "orange",
         onClick: () => hideAddress(entry),
@@ -1117,7 +1127,7 @@ function showAddress({ accountId, entry, onBack }) {
       address,
       onViewPublicKey: () => showPublicKey({ address, value: xOnlyKeyFromAddress(address), onBack: back }),
     });
-    $("#receive").onclick = () => showQr({ title, address, backLabel: "Close", onBack: back });
+    $("#receive").onclick = () => coldReceive({ label: title, address, onBack: back });
     $("#send").onclick = () => openSend(false);
     for (const row of app.querySelectorAll("[data-tx]")) row.onclick = () => transactionSheet(state.history.txs[Number(row.dataset.tx)]);
     const historyRetry = $("#history-retry");

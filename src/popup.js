@@ -7,7 +7,7 @@ import { ext, isExtension, tellBackground } from "./browser.js";
 import * as vault from "./vault.js";
 import * as wallet from "./wallet.js";
 import {
-  app, isTab, esc, render, $, toast, copyText, settings, noteActivity, ICONS, showQr, showQrPending, showSheet, closeDialogs,
+  app, isTab, esc, render, $, toast, copyText, settings, noteActivity, ICONS, showQr, showQrPending, showSheet, closeDialogs, RECEIVE_NOTES,
 } from "./ui.js";
 import { showSend } from "./send.js";
 import { showRequestPayment } from "./request-payment.js";
@@ -455,17 +455,22 @@ async function openReceive(onBack) {
   const mine = ++receiveSeq;
   const stale = () => epoch !== accountEpoch || mine !== receiveSeq || app.dataset.screen !== "qr";
   showQrPending({ onBack });
-  let address;
-  try { address = await wallet.freshReceiveAddress(); } catch { address = null; }
+  let fresh;
+  try { fresh = await wallet.freshReceive(); } catch { fresh = null; }
   if (stale()) return;
+  const address = fresh?.address;
   if (!address) return showQrPending({ failed: true, onBack });
   let balanceSompi = null;
   try { balanceSompi = (await wallet.balancesFor([address]))[address] ?? null; } catch { /* unknown - nothing shown */ }
   if (stale()) return;
+  // a regular address (KaPay iOS e188209): it takes kUSDT as well as Kaspa
   showQr({
+    heading: "Receive Kaspa",
+    label: fresh.label,
     address,
     balanceSompi,
-    note: "A fresh address, never used before. Kaspa sent here lands in this account and shows in your spending total. This address should be used for everything not related to chatting or domains.",
+    privacy: RECEIVE_NOTES.fresh,
+    notes: [RECEIVE_NOTES.kaspaAndKusdt, RECEIVE_NOTES.receiveUse],
     onBack,
   });
 }
@@ -476,9 +481,11 @@ async function openChattingQr(s, onBack) {
   const main = s?.addresses?.main;
   if (!main) return;
   showQr({
+    heading: "Chatting Address",
     address: (await wallet.identityFor(s.account.id).catch(() => null))?.address || main,
     balanceSompi: s.balances?.main ?? null,
-    note: "This address should be for chatting and domains only. 1 Kaspa is enough for about 500 interactions in the app. Domains cost from 35 to 4,000 Kaspa, depending on the name.",
+    privacy: RECEIVE_NOTES.chatting,
+    notes: [RECEIVE_NOTES.kaspaAndKusdt, RECEIVE_NOTES.chattingUse],
     onBack,
   });
 }

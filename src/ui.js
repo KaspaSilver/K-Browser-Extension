@@ -348,21 +348,81 @@ export function navHeader({ back = true, backLabel = "Back", title = "" } = {}) 
 // code in an accent frame, the full address, an optional line on what the address is for, and
 // "Tap anywhere to copy". With a title (Show QR Code: "Address #n") the bar shows it; without
 // one it shows the balance, as the iOS bar's principal item does.
-export async function showQr({ title = "", address, balanceSompi = null, note = "", onBack, backLabel = "Back" }) {
-  const barTitle = title || (balanceSompi != null ? `${formatKas8(balanceSompi)} KAS` : "—");
+// --- Every receive screen (KaPay iOS e188209 AddressReceiveView) --------------------------------
+// The Kaspa logo and "Receive Kaspa" (or the address's own title), the address's name and balance,
+// its QR on a white card, the whole address, what it means for privacy, then what may be sent to
+// it. A click anywhere copies the address; no Copy or Share buttons.
+
+const NOTE_ICONS = {
+  allowed: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="m7.5 12.5 3 3 6-6.5" fill="none" stroke="var(--bg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warning: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.3 2.5h7.4l5.8 5.8v7.4l-5.8 5.8H8.3l-5.8-5.8V8.3Z" fill="currentColor"/><path d="m9 9 6 6M15 9l-6 6" stroke="var(--bg)" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M12 11v6" stroke="var(--bg)" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.4" fill="var(--bg)"/></svg>',
+  private: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0 1 12 5c6 0 9.5 7 9.5 7a17 17 0 0 1-3 3.9M6.6 6.6A16.6 16.6 0 0 0 2.5 12S6 19 12 19a9.6 9.6 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
+  public: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><circle cx="12" cy="9.5" r="3.4" fill="var(--bg)"/><path d="M6 18.2c1.4-2.4 3.6-3.6 6-3.6s4.6 1.2 6 3.6" fill="var(--bg)"/></svg>',
+  quantum: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.5v6c0 4.8 3.2 8.9 7.5 10 4.3-1.1 7.5-5.2 7.5-10v-6Z" fill="currentColor"/></svg>',
+};
+
+/** The notes a receive screen shows (iOS ReceiveNote), word for word. */
+export const RECEIVE_NOTES = {
+  fresh: { kind: "private", text: "A brand-new address of yours, never used or handed out: this payment can't be tied to your name." },
+  spending: { kind: "private", text: "A spending address of yours: a payment here isn't tied to your name." },
+  chatting: { kind: "public", text: "Your Chatting Address shows your .kachat name and identity: whoever pays here can see it's you." },
+  quantum: { kind: "quantum", text: "A quantum-resistant address: its key stays hidden until it spends." },
+  coldStorage: { kind: "info", text: "A Cold Storage address: its key is on your KasSigner, never on this computer." },
+  kaspaAndKusdt: { kind: "allowed", text: "Kaspa, and kUSDT on Kaspa, can be sent here." },
+  kaspaOnly: { kind: "allowed", text: "Only Kaspa can be sent here." },
+  noKusdtQuantum: { kind: "warning", text: "Don't send kUSDT here: it can't be traded from a quantum-resistant address. Use Receive for a regular one." },
+  noKusdtCold: { kind: "warning", text: "Don't send kUSDT here: Cold Storage can't move it." },
+  receiveUse: { kind: "info", text: "It lands in this account and shows in your spending total. Use it for everything except .kachat names." },
+  chattingUse: { kind: "info", text: "Use for chatting and acquiring .kachat domains." },
+};
+
+const noteHtml = (note, cls) => `<div class="${cls} rcv-note-${note.kind}"><span class="rcv-note-icon">${NOTE_ICONS[note.kind] || NOTE_ICONS.info}</span><span>${esc(note.text)}</span></div>`;
+
+/** "1,234.5 KAS": an amount grouped, its trailing zeros dropped (iOS groupedAmount). */
+export function groupedKas(sompi) {
+  const value = BigInt(sompi ?? 0);
+  const abs = value < 0n ? -value : value;
+  const whole = (abs / 100_000_000n).toLocaleString("en-US");
+  const fraction = String(abs % 100_000_000n).padStart(8, "0").replace(/0+$/, "");
+  return `${value < 0n ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
+/**
+ * The receive screen. `heading`: "Receive Kaspa" (default) or the address's own title; `label`:
+ * "Address #4", a Cold Storage label (or `title`, as older callers pass it); `balanceSompi`: shown
+ * under the name when known; `privacy` and `notes`: RECEIVE_NOTES entries; `note`: an older
+ * caller's line, shown as an info note.
+ */
+export async function showQr({ heading = "Receive Kaspa", title = "", label = "", address, balanceSompi = null, privacy = null, notes = [], note = "", onBack, backLabel = "Back" }) {
+  const name = label || title;
+  const allNotes = [...notes, ...(note ? [{ kind: "info", text: note }] : [])];
   render(`
-    <header class="navbar qr-bar">
+    <header class="navbar">
       <button class="nav-back" id="back" aria-label="${esc(backLabel)}">${ICONS.back}<span>${esc(backLabel)}</span></button>
-      <div class="nav-title ${title ? "" : "mono-digits"}">${esc(barTitle)}</div>
+      <div class="nav-title"></div>
     </header>
-    <section class="qr-page" id="qr-page" title="Tap anywhere to copy">
-      <div class="qr-frame"><canvas id="qr" width="512" height="512" aria-label="QR code for ${esc(address)}"></canvas></div>
-      <div class="qr-address">${esc(address)}</div>
-      ${note ? `<p class="qr-note">${esc(note)}</p>` : ""}
-      <p class="qr-hint">Tap anywhere to copy</p>
+    <section class="rcv" id="qr-page" title="Click anywhere to copy">
+      <div class="rcv-head"><img class="rcv-logo" src="icons/kaspa-logo.png" alt="" /><h2>${esc(heading)}</h2></div>
+      ${name || balanceSompi != null ? `<div class="rcv-name">
+        ${name ? `<div class="rcv-label">${esc(name)}</div>` : ""}
+        ${balanceSompi != null ? `<div class="rcv-balance">${esc(groupedKas(balanceSompi))} KAS</div>` : ""}
+      </div>` : ""}
+      <div class="rcv-qr"><canvas id="qr" width="512" height="512" aria-label="QR code for ${esc(address)}"></canvas></div>
+      <div class="rcv-address-block">
+        <div class="rcv-address">${esc(address)}</div>
+        ${privacy ? noteHtml(privacy, "rcv-privacy") : ""}
+      </div>
+      <p class="rcv-hint">Tap anywhere to copy</p>
+      ${allNotes.length ? `<div class="rcv-notes">${allNotes.map((n) => noteHtml(n, "rcv-note")).join("")}</div>` : ""}
     </section>`, "qr");
   $("#back").onclick = onBack;
-  $("#qr-page").onclick = () => copyText(address);
+  $("#qr-page").onclick = (event) => {
+    // a selection of the address being made isn't a click to copy
+    if (String(window.getSelection?.() || "").trim()) return;
+    if (event.target.closest("button, a")) return;
+    copyText(address);
+  };
   try {
     await drawKaspaQr($("#qr"), address, { dark: "#000000", light: "#ffffff" });
   } catch { /* the address text is still there to copy */ }
@@ -372,8 +432,8 @@ export async function showQr({ title = "", address, balanceSompi = null, note = 
 export function showQrPending({ failed = false, onBack }) {
   render(`
     ${navHeader({})}
-    <section class="qr-page">
-      ${failed ? '<p class="qr-note">Spending address is unlocking. Go back and try again.</p>' : '<span class="spinner dark-spinner"></span><p class="qr-note">Preparing a fresh address</p>'}
+    <section class="rcv rcv-waiting">
+      ${failed ? '<p class="rcv-pending">Spending address is unlocking. Go back and try again.</p>' : '<span class="spinner"></span><p class="rcv-pending">Preparing a fresh address</p>'}
     </section>`, "qr");
   $("#back").onclick = onBack;
 }

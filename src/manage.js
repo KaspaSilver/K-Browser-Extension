@@ -19,8 +19,19 @@ import * as wallet from "./wallet.js";
 import * as vault from "./vault.js";
 import {
   app, esc, render, $, toast, copyText, copySecret, ICONS, navHeader, showQr, showSheet, showAlert,
-  passwordGate, formatKas8,
+  passwordGate, formatKas8, RECEIVE_NOTES,
 } from "./ui.js";
+
+/** A spending address's receive screen (KaPay iOS e188209): a regular one takes Kaspa and kUSDT; a
+ *  quantum-resistant one takes Kaspa only, and says not to send kUSDT there. */
+function spendingReceive({ label, address, index, onBack }) {
+  const quantum = wallet.isQuantumIndex(index);
+  showQr({
+    heading: "Receive Kaspa", label, address, backLabel: "Close", onBack,
+    privacy: quantum ? RECEIVE_NOTES.quantum : RECEIVE_NOTES.spending,
+    notes: quantum ? [RECEIVE_NOTES.kaspaOnly, RECEIVE_NOTES.noKusdtQuantum] : [RECEIVE_NOTES.kaspaAndKusdt],
+  });
+}
 import { showSend } from "./send.js";
 import { kachatWordmark } from "./market.js";
 import { addressNamesTab, showLiveNameDetail } from "./kachat-live.js";
@@ -46,6 +57,8 @@ export function quantumShieldHtml(row) {
 
 // SF Symbols these screens use, drawn to match.
 const SF = {
+  // shield: Generate Quantum-Resistant Address
+  shield: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 5 6v5.4c0 4.4 3 8.2 7 9.4 4-1.2 7-5 7-9.4V6Z"/></svg>',
   // arrow.up.circle: Send to Chatting Address
   arrowUpCircle: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M12 16.5v-9M8 11l4-4 4 4"/></svg>',
   arrowUpFill: '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M12 17V7.5M7.8 11.5L12 7.3l4.2 4.2" fill="none" stroke="var(--bg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -433,8 +446,8 @@ export function showManageAddress(opts) {
     for (const tab of app.querySelectorAll("[data-tab]")) tab.onclick = () => { state.tab = tab.dataset.tab; paint(); };
     $("#address-options").onclick = addressActions;
     $("#receive").onclick = () => showQr({
-      address: opts.address, balanceSompi: total, backLabel: "Close", onBack: back,
-      note: "This address should be for chatting and domains only. 1 Kaspa is enough for about 500 interactions in the app. Domains cost from 35 to 4,000 Kaspa, depending on the name.",
+      heading: "Chatting Address", address: opts.address, balanceSompi: total, backLabel: "Close", onBack: back,
+      privacy: RECEIVE_NOTES.chatting, notes: [RECEIVE_NOTES.kaspaAndKusdt, RECEIVE_NOTES.chattingUse],
     });
     $("#send").onclick = () => openSend(false);
     const balanceRetry = $("#balance-retry");
@@ -574,7 +587,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
       rows: [
         { label: "Rename Address", subtitle: "Gives this address a label of your own.", icon: SF.pencil, onClick: () => renameAddress(row) },
         { label: "Copy Address", subtitle: "Puts the full address on the clipboard.", icon: SF.doc, onClick: () => copyText(row.address) },
-        { label: "Show QR Code", subtitle: "Full screen, for scanning with another device.", icon: SF.qrcode, onClick: () => showQr({ title: `Address #${row.index}`, address: row.address, backLabel: "Close", onBack: back }) },
+        { label: "Show QR Code", subtitle: "Full screen, for scanning with another device.", icon: SF.qrcode, onClick: () => spendingReceive({ label: row.customLabel || `Address #${row.index}`, address: row.address, index: row.index, onBack: back }) },
         // Send Kaspa from this address with the Chatting Address already the recipient (KaPay iOS
         // 17bda71); nothing to send from an empty one
         ...(state.chatting?.address ? [{
@@ -624,9 +637,12 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
 
   const actionRows = () => {
     const discovering = Boolean(state.discovery);
-    const busy = state.busy === "generate";
+    const busy = Boolean(state.busy?.startsWith?.("generate"));
     return [
-      { label: "Generate New Spending Address", subtitle: "Reveals the next unused address in this wallet.", icon: SF.plusCircle, busy, disabled: discovering, onClick: generate },
+      // a regular address is what Receive gives; a quantum-resistant one is made only on purpose
+      // (KaPay iOS e188209)
+      { label: "Generate Non-Quantum Address", subtitle: "A regular address, like Receive gives you. Works with everything, kUSDT included.", icon: SF.plusCircle, busy: state.busy === "generate-regular", disabled: discovering || busy, onClick: () => generate({ quantum: false }) },
+      { label: "Generate Quantum-Resistant Address", subtitle: "Keeps its key hidden until it spends. For Kaspa only: kUSDT can't be traded from it.", icon: SF.shield, busy: state.busy === "generate-quantum", disabled: discovering || busy, onClick: () => generate({ quantum: true }) },
       { label: "Discover Addresses", subtitle: "Finds addresses holding a balance or a domain.", icon: SF.magnifier, disabled: discovering, keepOpen: true, onClick: discover },
       { label: "Address Visibility", subtitle: "Check off every address you want on the list, in one sitting.", icon: SF.checklist, disabled: discovering, onClick: () => showVisibility({ onBack: back }) },
     ];
@@ -664,13 +680,14 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     if (keep) keep.onclick = () => actionsSheet.close();
   };
 
-  async function generate() {
-    state.busy = "generate";
+  async function generate({ quantum }) {
+    if (state.busy) return;
+    state.busy = quantum ? "generate-quantum" : "generate-regular";
     paint();
     try {
-      const index = await wallet.generateSpendingAddress();
+      const index = quantum ? await wallet.generateSpendingAddress() : await wallet.generateRegularSpendingAddress();
       // numbered on its own chain (iOS e001786): a quantum-safe slot is #0, #1, ...
-      toast(`Spending address #${wallet.isQuantumIndex(index) ? index - wallet.QUANTUM_INDEX_BASE : index} is ready.`);
+      toast(`Address #${wallet.isQuantumIndex(index) ? index - wallet.QUANTUM_INDEX_BASE : index} is ready.`);
     } catch (error) {
       toast(error.message);
     }
@@ -712,7 +729,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
                 : `<span class="strong small">${esc(formatKas8(state.chatting.balance))} KAS</span>`}
             </div>
           </div>` : "";
-    const busy = Boolean(state.discovery) || state.busy === "generate";
+    const busy = Boolean(state.discovery) || Boolean(state.busy?.startsWith?.("generate"));
     const scroll = app.querySelector(".manage-scroll")?.scrollTop || 0;
     render(`
       ${navHeader({ title: "Manage Addresses" })}
@@ -828,7 +845,7 @@ function showSpendingAddress({ row, onBack }) {
       onViewPublicKey: wallet.isQuantumIndex(row.index) ? null : () => showPublicKey({ source, address: row.address, onBack: back }),
     });
     for (const tab of app.querySelectorAll("[data-tab]")) tab.onclick = () => { state.tab = tab.dataset.tab; paint(); };
-    $("#receive").onclick = () => showQr({ title: `Address #${row.index}`, address: row.address, backLabel: "Close", onBack: back });
+    $("#receive").onclick = () => spendingReceive({ label: title, address: row.address, index: row.index, onBack: back });
     $("#send").onclick = () => openSend(false);
     bindTabsContent(state, { address: row.address, repaint: paint, reloadHistory: loadHistory, reloadCoins: loadCoins, onCompound: () => openSend(true) });
   }

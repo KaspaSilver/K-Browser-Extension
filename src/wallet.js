@@ -1434,14 +1434,27 @@ export async function reserveFreshSpendingAddress() {
   return { index, address, accountId: account.id };
 }
 
-// New addresses are on the quantum-safe chain (iOS bba1b1e lowestUnusedQuantumAddress): a hidden
-// quantum slot that is confirmed unused is recycled, else the chain extends by one. Legacy
-// addresses are never handed out again, and stay spendable.
+// Generate Quantum-Resistant Address (iOS bba1b1e lowestUnusedQuantumAddress; made only on purpose
+// since KaPay iOS e188209): a hidden quantum slot that is confirmed unused is recycled, else the
+// chain extends by one.
 export async function generateSpendingAddress(forAccount = null) {
+  return recycleOrExtend(forAccount, { quantum: true });
+}
+
+/** Generate Non-Quantum Address, and what Receive hands out (KaPay iOS e188209
+ *  lowestUnusedRegularAddress): a regular address takes kUSDT as well as Kaspa. The lowest hidden
+ *  regular slot confirmed unused (not the primary, nothing on it) is recycled and shown again, else
+ *  the regular chain extends by one. An already-visible slot is never picked, so Generate never
+ *  hands out the same row twice; a probe that can't answer skips that slot. */
+export async function generateRegularSpendingAddress(forAccount = null) {
+  return recycleOrExtend(forAccount, { quantum: false });
+}
+
+async function recycleOrExtend(forAccount, { quantum }) {
   const { account, state } = forAccount ? { account: forAccount, state: await spendingState(forAccount.id) } : await activeState();
   const cached = (await cachedAddresses(account.id))?.spending || {};
   const candidates = [...state.hidden].sort((a, b) => a - b)
-    .filter((i) => isQuantumIndex(i) && i !== state.activeIndex && chainLocalIndex(i) <= state.qMaxIndex);
+    .filter((i) => isQuantumIndex(i) === quantum && i !== state.activeIndex && (quantum ? chainLocalIndex(i) <= state.qMaxIndex : i <= state.maxIndex));
   if (candidates.length) {
     const addresses = { ...(await spendingAddressesAt(candidates, account)), ...cached };
     const balances = await balancesFor(candidates.map((i) => addresses[i]));
@@ -1461,8 +1474,23 @@ export async function generateSpendingAddress(forAccount = null) {
       }
     }
   }
-  const { index } = await claimFreshQuantumSlot(account, { unhide: true });
-  return index;
+  if (quantum) return (await claimFreshQuantumSlot(account, { unhide: true })).index;
+  return claimNextRegularSlot(account);
+}
+
+/** One past the regular chain's end, claimed and recorded in one step (one at a time across
+ *  KaPay's windows, as claimFreshQuantumSlot): the end moves to it, it is shown and cached. */
+async function claimNextRegularSlot(account) {
+  const claim = async () => {
+    const now = await spendingState(account.id);
+    const index = now.maxIndex + 1;
+    const address = (await spendingAddressRange(index, 1, account))[index];
+    await saveSpendingState(account.id, { ...boundPatchFor(index, now), hidden: now.hidden.filter((i) => i !== index) });
+    if (address) await cacheSpendingAddress(account.id, index, address);
+    return index;
+  };
+  const locks = globalThis.navigator?.locks;
+  return locks?.request ? locks.request(`kapay-fresh-regular-${account.id}`, claim) : claim();
 }
 
 // ChangeNOW Swap's payout (KaChat-Desktop Build 217, iOS 28ecee0): the next LEGACY slot, never a
@@ -1516,14 +1544,15 @@ export async function revealSpendingAddress(index) {
 }
 
 /**
- * The Receive QR address (iOS freshReceiveAddress): the one handed out last time while it is still
- * untouched and quantum-safe, else the lowest hidden quantum-safe slot never used, else a brand-new
- * one (generateSpendingAddress). An address that has held change or spent is never shown again
- * (KaPay iOS 2da5f4b): a send marks both at once, whatever the REST server has caught up with, and a
- * legacy pointer, even unused, carries its key in the address itself. Never changes the primary. A
- * failed probe keeps the current answer rather than rotating on a guess.
+ * The Receive QR address (iOS freshReceiveAddress): a REGULAR address since KaPay iOS e188209 - it
+ * takes kUSDT as well as Kaspa; quantum-resistant ones are made on purpose in Manage Addresses. The
+ * one handed out last time while it is still regular and untouched, else the lowest hidden regular
+ * slot never used, else a brand-new one (generateRegularSpendingAddress). An address that has held
+ * change or spent is never shown again (KaPay iOS 2da5f4b). Never changes the primary. A failed
+ * probe keeps the current answer rather than rotating on a guess.
  */
-export async function freshReceiveAddress() {
+/** -> { address, index, label } of the Receive address, or null (an account switched meanwhile). */
+export async function freshReceive() {
   const { account, state } = await activeState();
   // Derived from the recovery phrase every time (audit EXT-006): a cached address that doesn't
   // match is replaced, never shown.
@@ -1539,15 +1568,24 @@ export async function freshReceiveAddress() {
   // an answer that comes back after an account switch is dropped (iOS fb2323e): never show one
   // account's address under another
   const stillActive = async () => (await activeAccountSecrets()).id === account.id;
-  if (isQuantumIndex(state.receiveIndex)) {
+  // the address, and what the screen calls it ("Address #4", or the label you gave it)
+  const answer = async (index, address) => {
+    if (!(await stillActive())) return null;
+    const label = labelFor(await spendingState(account.id), index);
+    return { address, index, label };
+  };
+  if (state.receiveIndex != null && !isQuantumIndex(state.receiveIndex)) {
     const address = await addressAt(state.receiveIndex);
-    const spent = (await spendingState(account.id)).qSpent.includes(String(address).toLowerCase());
-    if (!spent && (await addressUsedOrFunded(address)) !== true) return (await stillActive()) ? address : null;
+    if ((await addressUsedOrFunded(address)) !== true) return answer(state.receiveIndex, address);
   }
-  const index = await generateSpendingAddress(account);
+  const index = await generateRegularSpendingAddress(account);
   await saveSpendingState(account.id, { receiveIndex: index });
-  const address = await addressAt(index);
-  return (await stillActive()) ? address : null;
+  return answer(index, await addressAt(index));
+}
+
+/** freshReceive's address alone. */
+export async function freshReceiveAddress() {
+  return (await freshReceive())?.address ?? null;
 }
 
 // A restored recovery phrase discovers its addresses by itself (iOS da2c8e2). The sweep runs in the
