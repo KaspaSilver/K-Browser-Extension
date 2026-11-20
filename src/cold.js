@@ -26,7 +26,7 @@ import * as vault from "./vault.js";
 import * as dock from "./dock.js";
 import { getLocal, setLocal, removeLocal } from "./browser.js";
 import {
-  app, esc, render, $, toast, copyText, ICONS, navHeader, showQr, showSheet, showAlert, formatKas8, RECEIVE_NOTES,
+  app, esc, render, $, toast, copyText, ICONS, navHeader, showQr, showSheet, showAlert, groupedKas8, RECEIVE_NOTES, balanceCardHtml,
 } from "./ui.js";
 import { scanQr } from "./camera.js";
 import { kachatWordmark } from "./market.js";
@@ -35,7 +35,7 @@ import { addressDomainsTab } from "./address-domains.js";
 import { kachatRegistry } from "./kachat-names.js";
 import { showAddToPortfolio } from "./portfolio.js";
 import { showColdSend } from "./cold-send.js";
-import { unreadableBalanceHtml, addressOptionsButtonHtml, showAddressActions, showPublicKey } from "./manage.js";
+import { unreadableBalanceHtml, addressOptionsButtonHtml, showAddressActions, showPublicKey, fiatTextFor } from "./manage.js";
 import { SF, txDate, feeText, portfolioKas, middle, shortAddress, fieldSheet } from "./cold-common.js";
 
 const INVALID_KPUB = "That doesn't look like a valid Kaspa extended public key (kpub).";
@@ -801,7 +801,7 @@ function showAccount({ accountId, onBack }) {
           </div>
           <div class="tx-meta">
             <span class="muted cold-caption">Total Balance</span>
-            <span class="cold-total">${!state.entries ? '<span class="spinner small-spin"></span>' : unread ? '<span class="muted">—</span>' : `${esc(formatKas8(total))} KAS`}</span>
+            <span class="cold-total">${!state.entries ? '<span class="spinner small-spin"></span>' : unread ? '<span class="muted">—</span>' : `${esc(groupedKas8(total))} KAS`}</span>
           </div>
           <button class="ios-capsule" id="address-actions" ${busy ? "disabled" : ""}>${busy ? '<span class="spinner dark-spinner small-spin"></span>' : "Address Actions"}</button>
         </div>
@@ -814,7 +814,7 @@ function showAccount({ accountId, onBack }) {
                 <span class="mono cold-row-address">${esc(shortAddress(entry.address))}</span>
                 ${entry.balanceSompi == null
                   ? '<span class="muted small cold-row-amount">Couldn\'t load the coins at this address</span>'
-                  : `<span class="strong cold-row-amount">${esc(formatKas8(entry.balanceSompi))} KAS</span>`}
+                  : `<span class="strong cold-row-amount">${esc(groupedKas8(entry.balanceSompi))} KAS</span>`}
                 <span class="address-status">${usedBadge(entry)}${domainOwners.get(entry.address) ? '<span class="domain-tag">Contains domain</span>' : ""}</span>
               </div>
               <button class="icon plain card-menu" data-menu="${entry.index}" aria-label="Address actions">${SF.ellipsisV}</button>
@@ -1044,7 +1044,7 @@ function showAddress({ accountId, entry, onBack }) {
               ${tx.time ? `<span class="tiny muted">${esc(txDate(tx.time))}</span>` : ""}
             </span>
             <span class="ios-tx-right">
-              ${tx.direction ? `<span class="ios-tx-amount ${cls}">${tx.direction === "out" ? "-" : "+"}${esc(formatKas8(tx.amountSompi))} KAS</span>` : ""}
+              ${tx.direction ? `<span class="ios-tx-amount ${cls}">${tx.direction === "out" ? "-" : "+"}${esc(groupedKas8(tx.amountSompi))} KAS</span>` : ""}
               ${tx.feeSompi != null ? `<span class="tiny muted">${esc(feeText(tx.feeSompi))}</span>` : ""}
             </span>
             <span class="accent">${SF.upRightSquare}</span>
@@ -1070,7 +1070,7 @@ function showAddress({ accountId, entry, onBack }) {
             <span class="accent">${coin.isCoinbase ? SF.cube : SF.grid}</span>
             <span class="tx-meta">
               ${label ? `<span class="accent tiny strong">${esc(label)}</span>` : ""}
-              <span class="strong small">${esc(formatKas8(coin.amount))} KAS</span>
+              <span class="strong small">${esc(groupedKas8(coin.amount))} KAS</span>
               <span class="mono tiny muted">${esc(middle(`${coin.transactionId}:${coin.index}`, 10))}</span>
             </span>
             ${coin.isCoinbase ? '<span class="tiny muted strong">Coinbase</span>' : ""}
@@ -1104,7 +1104,7 @@ function showAddress({ accountId, entry, onBack }) {
         <div class="nav-title cold-nav-title">${esc(title)}</div>
         ${addressOptionsButtonHtml()}
       </header>
-      ${unreadable ? unreadableBalanceHtml("cold-address-balance") : `<div class="ios-balance cold-address-balance"><span class="muted tiny">Balance</span><span class="ios-balance-value">${total != null ? `${esc(formatKas8(total))} KAS` : '<span class="spinner small-spin"></span>'}</span></div>`}
+      ${unreadable ? unreadableBalanceHtml("cold-address-balance") : balanceCardHtml({ label: title, sompi: total, fiatText: fiatTextFor(total, repaintIfHere) })}
       <div class="underline-tabs cold-tabs" role="tablist">
         ${tabs.map(([id, label]) => `<button role="tab" data-tab="${id}" aria-selected="${state.tab === id}">${esc(label)}</button>`).join("")}
       </div>

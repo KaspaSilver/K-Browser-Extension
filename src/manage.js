@@ -19,8 +19,27 @@ import * as wallet from "./wallet.js";
 import * as vault from "./vault.js";
 import {
   app, esc, render, $, toast, copyText, copySecret, ICONS, navHeader, showQr, showSheet, showAlert,
-  passwordGate, formatKas8, RECEIVE_NOTES,
+  passwordGate, groupedKas8, RECEIVE_NOTES, balanceCardHtml, settings,
 } from "./ui.js";
+import { IS_TESTNET } from "./net.js";
+
+// What a balance card's amount is worth (mainnet only): the price is read once per page, then the
+// screen that asked repaints with it.
+let fiatEntry = null;
+let fiatLoading = false;
+/** The worth of `sompi` in your currency for a balance card, or "" (testnet, no price yet). */
+export function fiatTextFor(sompi, repaint) {
+  if (IS_TESTNET || sompi == null) return "";
+  if (!fiatEntry && !fiatLoading) {
+    fiatLoading = true;
+    (async () => {
+      try { fiatEntry = await wallet.price((await settings()).currency || "usd"); } catch { fiatEntry = null; }
+      fiatLoading = false;
+      if (fiatEntry?.price) repaint?.();
+    })();
+  }
+  return fiatEntry?.price ? wallet.formatFiat(sompi, fiatEntry) : "";
+}
 
 /** A spending address's receive screen (KaPay iOS e188209): a regular one takes Kaspa and kUSDT; a
  *  quantum-resistant one takes Kaspa only, and says not to send kUSDT there. */
@@ -148,7 +167,7 @@ function historyHtml(state) {
           ${tx.time ? `<span class="tiny muted">${esc(txDate(tx.time))}</span>` : ""}
         </span>
         <span class="ios-tx-right">
-          ${tx.direction ? `<span class="ios-tx-amount ${cls}">${tx.direction === "out" ? "-" : "+"}${esc(formatKas8(tx.amountSompi))} KAS</span>` : ""}
+          ${tx.direction ? `<span class="ios-tx-amount ${cls}">${tx.direction === "out" ? "-" : "+"}${esc(groupedKas8(tx.amountSompi))} KAS</span>` : ""}
           ${tx.feeSompi != null ? `<span class="tiny muted">${esc(feeText(tx.feeSompi))}</span>` : ""}
         </span>
         <span class="accent">${SF.upRightSquare}</span>
@@ -196,7 +215,7 @@ function utxosHtml(state, compoundFooter) {
           <span class="accent">${coin.isCoinbase ? SF.cube : SF.grid}</span>
           <span class="tx-meta">
             ${label ? `<span class="accent tiny strong">${esc(label)}</span>` : ""}
-            <span class="strong small">${esc(formatKas8(coin.amount))} KAS</span>
+            <span class="strong small">${esc(groupedKas8(coin.amount))} KAS</span>
             <span class="mono tiny muted">${esc(middle(`${coin.transactionId}:${coin.index}`, 10))}</span>
           </span>
           ${coin.isCoinbase ? '<span class="tiny muted strong">Coinbase</span>' : ""}
@@ -401,7 +420,12 @@ export function showManageAddress(opts) {
   const repaintIfHere = () => { if (here()) paint(); };
   state.repaint = repaintIfHere;
   const { loadHistory, loadCoins } = loaders(state, opts.address, repaintIfHere);
-  const balance = () => (state.coins ? state.coins.reduce((sum, c) => sum + c.amount, 0n) : null);
+  // the wallet's known balance; the sum of the coins only while that's unknown, so it never sits at
+  // 0 while they load (KaPay iOS 3d126db)
+  const balance = () => state.known ?? (state.coins ? state.coins.reduce((sum, c) => sum + c.amount, 0n) : null);
+  vault.readAccounts().then((view) => wallet.cachedBalances(view.activeAccountId)).then((known) => {
+    if (known?.main != null && state.known == null) { state.known = BigInt(known.main); repaintIfHere(); }
+  }).catch(() => {});
 
   const openSend = (compound = false) => showSend({
     // an address's own page sends from that address, no From choice (iOS 7a8102b)
@@ -430,7 +454,7 @@ export function showManageAddress(opts) {
         ${addressOptionsButtonHtml()}
       </header>
       <div class="manage-scroll">
-        ${unreadable ? unreadableBalanceHtml() : `<div class="ios-balance"><span class="muted tiny">Balance</span><span class="ios-balance-value">${total != null ? `${esc(formatKas8(total))} KAS` : '<span class="spinner small-spin"></span>'}</span></div>`}
+        ${unreadable ? unreadableBalanceHtml() : balanceCardHtml({ label: "Chatting Address", sompi: total, fiatText: fiatTextFor(total, repaintIfHere) })}
         ${addressTabsHtml(state.tab)}
         ${addressTabContent(state, "Combines all UTXOs at this address into a single one, to reduce the number of inputs a future send needs.")}
       </div>
@@ -726,7 +750,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
               <span class="mono small">${esc(shortAddress(state.chatting.address))}</span>
               ${chattingUnread
                 ? '<span class="muted small">Couldn\'t load the coins at this address</span>'
-                : `<span class="strong small">${esc(formatKas8(state.chatting.balance))} KAS</span>`}
+                : `<span class="strong small">${esc(groupedKas8(state.chatting.balance))} KAS</span>`}
             </div>
           </div>` : "";
     const busy = Boolean(state.discovery) || Boolean(state.busy?.startsWith?.("generate"));
@@ -734,7 +758,12 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     render(`
       ${navHeader({ title: "Manage Addresses" })}
       <div class="manage-scroll">
-        <div class="ios-balance"><span class="muted tiny">Total Balance</span><span class="ios-balance-value big">${!state.list && state.error ? '<span class="muted">—</span>' : !state.list ? '<span class="spinner small-spin"></span>' : chattingUnread ? '<span class="muted">—</span>' : `${esc(formatKas8(total))} KAS`}</span></div>
+        ${balanceCardHtml({
+          label: "Total Balance",
+          sompi: state.list ? total : null,
+          unknown: (!state.list && Boolean(state.error)) || (Boolean(state.list) && chattingUnread),
+          fiatText: state.list && !chattingUnread ? fiatTextFor(total, () => { if (here()) paint(); }) : "",
+        })}
         <button class="ios-capsule" id="address-actions" ${busy ? "disabled" : ""}>${busy ? '<span class="spinner dark-spinner small-spin"></span>' : "Address Actions"}</button>
         ${state.error ? `<p class="error">${esc(state.error)}</p>` : ""}
         ${state.loading && !state.list ? '<div class="center-text"><span class="spinner"></span></div>' : ""}
@@ -747,7 +776,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
             <div class="address-card-main">
               <span class="muted small medium">${esc(displayLabel(row))}${quantumShieldHtml(row)}</span>
               <span class="mono small">${esc(shortAddress(row.address))}</span>
-              <span class="strong small">${esc(formatKas8(row.balanceSompi))} KAS</span>
+              <span class="strong small">${esc(groupedKas8(row.balanceSompi))} KAS</span>
               <span class="address-status">${usedBadge(row)}${domainOwners.get(row.address) ? '<span class="domain-tag">Contains domain</span>' : ""}</span>
             </div>
             ${state.busy?.primary === row.index
@@ -825,7 +854,7 @@ function showSpendingAddress({ row, onBack }) {
         ${addressOptionsButtonHtml()}
       </header>
       <div class="manage-scroll">
-        <div class="ios-balance"><span class="muted tiny">Balance</span><span class="ios-balance-value">${esc(formatKas8(row.balanceSompi))} KAS</span></div>
+        ${balanceCardHtml({ label: title, sompi: row.balanceSompi, fiatText: fiatTextFor(row.balanceSompi, repaintIfHere) })}
         ${addressTabsHtml(state.tab)}
         ${addressTabContent(state, "Combines this address's UTXOs to reduce the inputs a future send needs. A single transaction can only merge so many at once, so if this address has a very large number, tap Compound again after it confirms to keep reducing.")}
       </div>

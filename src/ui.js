@@ -438,6 +438,30 @@ export function showQrPending({ failed = false, onBack }) {
   $("#back").onclick = onBack;
 }
 
+/** "1,234.50000000": eight decimals, the whole part grouped (KaPay iOS 3d126db: every balance,
+ *  coin and history amount on the address pages). */
+export function groupedKas8(sompi) {
+  const value = BigInt(sompi ?? 0);
+  const abs = value < 0n ? -value : value;
+  return `${value < 0n ? "-" : ""}${(abs / 100_000_000n).toLocaleString("en-US")}.${String(abs % 100_000_000n).padStart(8, "0")}`;
+}
+
+/**
+ * A KaPlay-style balance card (KaPay iOS 3d126db AddressBalanceCard): the label, the amount big, and
+ * under it what it's worth (mainnet only, once a price is known). `sompi` null shows a spinner.
+ * `fiatText`: the worth, already formatted ("" for none).
+ */
+export function balanceCardHtml({ label, sompi, fiatText = "", unknown = false }) {
+  // `unknown`: it couldn't be read - a dash, never 0 KAS
+  const amount = unknown ? '<span class="muted">—</span>' : sompi == null ? '<span class="spinner small-spin"></span>' : `${esc(groupedKas8(sompi))} KAS`;
+  return `
+    <div class="bal-card">
+      <div class="bal-card-label">${esc(label)}</div>
+      <div class="bal-card-amount">${amount}</div>
+      ${fiatText ? `<div class="bal-card-detail">${esc(fiatText)}</div>` : ""}
+    </div>`;
+}
+
 /** "%.8f" - always eight decimals, no grouping, as every iOS balance line prints. */
 export function formatKas8(sompi) {
   const value = BigInt(sompi ?? 0);
