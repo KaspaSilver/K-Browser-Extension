@@ -1615,11 +1615,12 @@ export async function runPendingDiscovery(accountId) {
 /**
  * iOS "Discover Addresses" (WalletManager.discoverSpendingAddresses). A match is an address
  * holding Kaspa or a KNS domain.
- *   fast path   indexes 0..999: one bulk /addresses/active pass says which were ever touched;
- *               UTXOs for the touched ones in one sweep; KNS for touched, unfunded ones below
- *               #200.
- *   fallback    (the REST server can't answer /addresses/active) balances 100 at a time up to
- *               #5000, stopping past #1000 after 60 misses in a row; KNS below #200.
+ *   fast path   indexes 0..999 whatever the gaps, then windows of 200 while a window shows any
+ *               activity, up to #5000 (KaPay iOS 3d126db): one bulk /addresses/active pass per
+ *               window says which were ever touched; UTXOs for the touched ones; KNS for touched,
+ *               unfunded ones below #200, 6 at a time.
+ *   fallback    (the REST server can't answer /addresses/active) balances 100 at a time to #999,
+ *               then windows of 200 while a window finds anything, up to #5000; KNS below #200.
  * Matches are un-hidden; when the highest is past the revealed range, the range grows to it and
  * the empty indexes in between are hidden. onProgress({ checkingIndex, foundCount }).
  */
@@ -1630,7 +1631,8 @@ export async function discoverSpendingAddresses(onProgress = () => {}) {
   const MAX_INDEX = 5000;
   const BATCH = 100;
   const KNS_DEPTH = 200;
-  const GAP = 60;
+  // past the floor: windows of this many, while a window shows activity (KaPay iOS 3d126db)
+  const WINDOW = 200;
   const found = new Set();
   const addresses = {};
   // Any name service (iOS 7a5b157): .kas through KNS, .k and .kaspa through their own APIs.
@@ -1655,19 +1657,35 @@ export async function discoverSpendingAddresses(onProgress = () => {}) {
       slice.forEach((index, j) => { if (owns[j]) found.add(index); });
       onProgress({ checkingIndex: slice[slice.length - 1], foundCount: found.size });
     }
+    // Past the floor, a window at a time while a window shows any activity (it was the floor only).
+    for (let start = DEEP_FLOOR; start < MAX_INDEX; start += WINDOW) {
+      const window = await spendingAddressRange(start, WINDOW, account);
+      Object.assign(addresses, window);
+      const list = Array.from({ length: WINDOW }, (_, i) => start + i).filter((i) => window[i]);
+      const windowActive = await addressesActive(list.map((i) => window[i]));
+      if (!windowActive) break;
+      const windowTouched = list.filter((i) => windowActive[window[i]]);
+      onProgress({ checkingIndex: start + WINDOW - 1, foundCount: found.size });
+      if (!windowTouched.length) break;
+      const balances = await balancesFor(windowTouched.map((i) => window[i]));
+      for (const index of windowTouched) if ((balances[window[index]] ?? 0n) > 0n) found.add(index);
+    }
   } else {
-    let misses = 0;
-    for (let start = 0; start < MAX_INDEX; start += BATCH) {
-      if (start >= DEEP_FLOOR) Object.assign(addresses, await spendingAddressRange(start, BATCH, account));
-      const indexes = Array.from({ length: BATCH }, (_, i) => start + i);
+    for (let start = 0; start < MAX_INDEX;) {
+      const size = start < DEEP_FLOOR ? BATCH : WINDOW;
+      if (start >= DEEP_FLOOR) Object.assign(addresses, await spendingAddressRange(start, size, account));
+      const indexes = Array.from({ length: size }, (_, i) => start + i);
       const balances = await balancesFor(indexes.map((i) => addresses[i]));
+      let hits = 0;
       for (const index of indexes) {
         let hit = (balances[addresses[index]] ?? 0n) > 0n;
         if (!hit && index < KNS_DEPTH) hit = await knsOwns(addresses[index]);
-        if (hit) { found.add(index); misses = 0; } else misses += 1;
+        if (hit) { found.add(index); hits += 1; }
       }
-      onProgress({ checkingIndex: start + BATCH - 1, foundCount: found.size });
-      if (start + BATCH >= DEEP_FLOOR && misses >= GAP) break;
+      onProgress({ checkingIndex: start + size - 1, foundCount: found.size });
+      start += size;
+      // past the floor, a window that finds nothing ends the sweep
+      if (start > DEEP_FLOOR && !hits) break;
     }
   }
 
