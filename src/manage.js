@@ -46,6 +46,8 @@ export function quantumShieldHtml(row) {
 
 // SF Symbols these screens use, drawn to match.
 const SF = {
+  // arrow.up.circle: Send to Chatting Address
+  arrowUpCircle: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M12 16.5v-9M8 11l4-4 4 4"/></svg>',
   arrowUpFill: '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M12 17V7.5M7.8 11.5L12 7.3l4.2 4.2" fill="none" stroke="var(--bg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   // arrow.up.circle.fill on an accent capsule: a black disc with the arrow cut out in the accent.
   sendFill: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M12 17V7.5M7.8 11.5L12 7.3l4.2 4.2" fill="none" stroke="var(--kaspa)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -573,6 +575,17 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
         { label: "Rename Address", subtitle: "Gives this address a label of your own.", icon: SF.pencil, onClick: () => renameAddress(row) },
         { label: "Copy Address", subtitle: "Puts the full address on the clipboard.", icon: SF.doc, onClick: () => copyText(row.address) },
         { label: "Show QR Code", subtitle: "Full screen, for scanning with another device.", icon: SF.qrcode, onClick: () => showQr({ title: `Address #${row.index}`, address: row.address, backLabel: "Close", onBack: back }) },
+        // Send Kaspa from this address with the Chatting Address already the recipient (KaPay iOS
+        // 17bda71); nothing to send from an empty one
+        ...(state.chatting?.address ? [{
+          label: "Send to Chatting Address", subtitle: "Moves Kaspa from this address to your Chatting Address.", icon: SF.arrowUpCircle,
+          disabled: !(row.balanceSompi > 0n),
+          onClick: () => showSend({
+            source: { kind: "spending", index: row.index }, fromAddress: row.address, lockedSource: true, navTitle: "Send Kaspa",
+            recipient: state.chatting.address,
+            onClose: () => back(),
+          }),
+        }] : []),
         ...(hideable ? [{ label: "Hide Address", subtitle: "Removes it from this list. Re-enable it in Address Visibility.", icon: SF.eyeSlash, tint: "orange", onClick: () => hideAddress(row) }] : []),
       ],
     });
