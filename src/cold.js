@@ -60,8 +60,15 @@ function normalize(raw) {
     importedAt: Number(raw.importedAt) || Date.now(),
     labels: raw.labels && typeof raw.labels === "object" ? { ...raw.labels } : {},
     hidden: Array.isArray(raw.hidden) ? [...new Set(raw.hidden.map(Number).filter(Number.isInteger))] : [],
+    // the bell notes Kaspa this account receives (K iOS ColdStorageAccount.notifyOnReceive): on
+    // unless turned off
+    notifyOnReceive: raw.notifyOnReceive !== false,
   };
 }
+
+// bell / bell.slash: Receive Notifications on an account's actions
+const BELL = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>';
+const BELL_SLASH = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 5.6A6 6 0 0 1 18 11v4M6 11v5l-1.5 2H17"/><path d="M10 20.5a2 2 0 0 0 4 0M3 3l18 18"/></svg>';
 
 async function loadAccounts() {
   const key = await storageKey();
@@ -76,9 +83,13 @@ async function loadAccounts() {
 export async function coldWatchAddresses() {
   const out = [];
   for (const account of await loadAccounts()) {
+    // an account with Receive Notifications off isn't watched, and only the addresses an account
+    // shows are (K iOS: hidden ones aren't)
+    if (account.notifyOnReceive === false) continue;
+    const hidden = new Set(account.hidden);
     try {
       const addresses = await wallet.kpubAddresses(account.kpub, 0, account.maxAddressIndex + 1);
-      addresses.forEach((address, index) => out.push({ account: account.label, index, address }));
+      addresses.forEach((address, index) => { if (!hidden.has(index)) out.push({ account: account.label, index, address }); });
     } catch { /* an unreadable kpub holds nothing we can show */ }
   }
   return out;
@@ -465,6 +476,16 @@ export function showColdStorage() {
             onConfirm: async (name) => { await updateAccount(account.id, (a) => { a.label = name; }); refresh(); },
           }),
         },
+        // K iOS ColdStorageView: the bell's receipts, per account
+        account.notifyOnReceive === false
+          ? {
+            label: "Turn On Receive Notifications", subtitle: "Notifies you when this account receives Kaspa.", icon: BELL,
+            onClick: async () => { await updateAccount(account.id, (a) => { a.notifyOnReceive = true; }); refresh(); },
+          }
+          : {
+            label: "Turn Off Receive Notifications", subtitle: "Stops notifying when this account receives Kaspa. Other accounts keep theirs.", icon: BELL_SLASH,
+            onClick: async () => { await updateAccount(account.id, (a) => { a.notifyOnReceive = false; }); refresh(); },
+          },
       ],
     });
   }
