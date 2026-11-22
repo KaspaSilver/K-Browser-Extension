@@ -314,6 +314,7 @@ function paintHome() {
             <div><span class="muted tiny">Spending</span><span class="strong small mono-digits">${spendingSompi != null ? `${esc(wallet.formatKas(spendingSompi, 8))} KAS` : "--"}</span></div>
           </div>
         </button>
+        ${s.scanning ? '<p class="muted small center-text wallet-scanning"><span class="spinner small-spin"></span> Scanning your addresses for balances…</p>' : ""}
         <div class="wallet-actions">
           ${actionButton("send", "Send", ACTION.send)}
           ${actionButton("receive", "Receive", ACTION.receive)}
@@ -620,6 +621,8 @@ async function refreshHome() {
       bellReceipts(s);
       // a restored phrase's address discovery, if it never completed (audit EXT-031)
       wallet.runPendingDiscovery(s.account.id);
+      // the Wallet tab's scan for balances on addresses not listed yet (K iOS scanAndRefresh)
+      startAddressScan(s);
       // a .kas commit whose reveal never went out (KaPay iOS 2da5f4b)
       wallet.resumeDomainReveals();
       // "Your own address" on every To field, KasSigner's send included (iOS 56f004f)
@@ -644,6 +647,20 @@ async function refreshHome() {
     if (refreshingFor === s) refreshingFor = null;
     paintHomeIfShowing(s);
   }
+}
+
+/** The Wallet tab's address scan (K iOS WalletView.scanAndRefresh): "Scanning your addresses for
+ *  balances…" under the balance card while it runs; anything it found shows on the tab after. */
+async function startAddressScan(s) {
+  if (!(await wallet.addressScanDue(s.account.id)) || homeState !== s) return;
+  s.scanning = true;
+  paintHomeIfShowing(s);
+  const found = await wallet.scanAddresses(s.account.id);
+  s.scanning = false;
+  if (homeState !== s) return;
+  // the balances again, with the addresses it revealed
+  if (found > 0 && app.dataset.screen === "home") { homeState = null; showHome(); return; }
+  paintHomeIfShowing(s);
 }
 
 /** The backup banner follows the signed-in account; it turns red once the account holds funds,

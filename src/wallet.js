@@ -1597,6 +1597,35 @@ let pendingDiscoveryRunning = false;
 export async function markDiscoveryPending(accountId) {
   if (accountId) await setLocal(pendingDiscoveryKey(accountId), Date.now());
 }
+// The Wallet tab's scan (K iOS WalletView.scanAndRefresh / AddressScan): on opening the tab, at
+// most once per account every 10 minutes and one at a time, the address sweep runs in the
+// background and shows anything new it finds. Its last run is kept for the browser session.
+const ADDRESS_SCAN_EVERY_MS = 10 * 60_000;
+const addressScanKey = (accountId) => netKey(`kachat.addressScan.${accountId}`);
+const addressScanRunning = new Set();
+/** Whether `accountId`'s Wallet-tab scan is due now. */
+export async function addressScanDue(accountId) {
+  if (!accountId || addressScanRunning.has(accountId) || pendingDiscoveryRunning) return false;
+  let last = 0;
+  try { last = Number(await getSession(addressScanKey(accountId))) || 0; } catch { last = 0; }
+  return Date.now() - last >= ADDRESS_SCAN_EVERY_MS;
+}
+/** Runs it (the active account only): -> how many addresses it found, or null when it didn't run. */
+export async function scanAddresses(accountId) {
+  if (!accountId || addressScanRunning.has(accountId)) return null;
+  addressScanRunning.add(accountId);
+  try {
+    if ((await activeAccountSecrets()).id !== accountId) return null;
+    try { await setSession(addressScanKey(accountId), Date.now()); } catch { /* runs again next time */ }
+    return await discoverSpendingAddresses(() => {}, { reveal: "newOnly" });
+  } catch (error) {
+    logWarn("[KaPay] address scan:", error);
+    return null;
+  } finally {
+    addressScanRunning.delete(accountId);
+  }
+}
+
 /** Runs the restore sweep for `accountId` when one is still owed (the active account only). */
 export async function runPendingDiscovery(accountId) {
   if (!accountId || pendingDiscoveryRunning || !(await getLocal(pendingDiscoveryKey(accountId)))) return;
@@ -1624,7 +1653,7 @@ export async function runPendingDiscovery(accountId) {
  * Matches are un-hidden; when the highest is past the revealed range, the range grows to it and
  * the empty indexes in between are hidden. onProgress({ checkingIndex, foundCount }).
  */
-export async function discoverSpendingAddresses(onProgress = () => {}) {
+export async function discoverSpendingAddresses(onProgress = () => {}, { reveal = "all" } = {}) {
   const { account, state } = await activeState();
   // the master key is derived once per run (both chains)
   const DEEP_FLOOR = 1000;
@@ -1718,7 +1747,12 @@ export async function discoverSpendingAddresses(onProgress = () => {}) {
   const hidden = new Set(state.hidden);
   for (let index = state.maxIndex + 1; index <= highest; index += 1) if (!found.has(index)) hidden.add(index);
   for (let n = state.qMaxIndex + 1; n <= quantumHighest; n += 1) if (!quantumFound.has(QUANTUM_INDEX_BASE + n)) hidden.add(QUANTUM_INDEX_BASE + n);
-  for (const index of [...found, ...quantumFound]) hidden.delete(index);
+  // "all" (Discover Addresses, a restore) shows every match; "newOnly" (the Wallet tab's scan, K iOS
+  // AddressScan) only matches past what was revealed - an address you hid stays hidden
+  for (const index of [...found, ...quantumFound]) {
+    const beyond = isQuantumIndex(index) ? chainLocalIndex(index) > state.qMaxIndex : index > state.maxIndex;
+    if (reveal === "all" || beyond) hidden.delete(index);
+  }
   // the account it started for, even if another is active now; nothing for a removed one (IOS-107)
   if (!(await accountStillExists(account.id))) return 0;
   await saveSpendingState(account.id, { maxIndex: highest, qMaxIndex: quantumHighest, hidden: [...hidden] });
