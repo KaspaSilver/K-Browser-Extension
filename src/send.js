@@ -19,11 +19,12 @@
 import * as wallet from "./wallet.js";
 import * as vault from "./vault.js";
 import { app, esc, render, $, toast, settings, ICONS, formatKas8, unitText } from "./ui.js";
-import { otherDomainsHtml, bindOtherDomains, splitTypedName } from "./names.js";
+import { otherDomainsHtml, bindOtherDomains, splitTypedName, requesterName } from "./names.js";
 import { scanQr } from "./camera.js";
-import { loadOwnAddresses } from "./own-addresses.js";
+import { loadOwnAddresses, isOwnPaymentRequest, ownAddressLabel } from "./own-addresses.js";
+import { openPanel } from "./kachat-ui.js";
 import { KAS_UNIT } from "./net.js";
-import { parsePaymentRequestLink, paymentRequestAmountText } from "../shared/engine/payment-request.js";
+import { parsePaymentRequestLink, paymentRequestAmountText, paymentRequestUniversalLink } from "../shared/engine/payment-request.js";
 import { SEND_OUTCOME_UNKNOWN, SEND_OUTCOME_UNKNOWN_MESSAGE, MAX_AMOUNT_CHANGED, MAX_AMOUNT_CHANGED_MESSAGE, MAX_SEND_INPUT_LIMIT } from "../shared/engine/transactions.js";
 import { maxPinCurrent, selectionKey } from "./send-guards.js";
 import { oneTransactionChunk, SEND_FEE_CHANGED } from "./send-coins.js";
@@ -31,8 +32,12 @@ import { logWarn } from "./log.js";
 import { entryFor, entryName } from "./address-book.js";
 import {
   FEE_TIERS, recipientCardHtml, recipientStatusHtml, recipientLookup, bindAddressBookButton, amountState, feeControlsHtml,
-  coinSummary, trimmedKas,
+  coinSummary, trimmedKas, addressResolutionHtml,
 } from "./send-pieces.js";
+
+// checkmark.seal.fill / person.crop.circle: "Requested by", verified or not (K iOS RequestedByHeader)
+const SEAL_FILL = '<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.8l2.4 1.8 3-.2.9 2.9 2.5 1.7-1 2.8 1 2.8-2.5 1.7-.9 2.9-3-.2L12 22.2l-2.4-1.8-3 .2-.9-2.9-2.5-1.7 1-2.8-1-2.8 2.5-1.7.9-2.9 3 .2Z" fill="#30d158"/><path d="m8.4 12.3 2.4 2.4 4.8-5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const PERSON_CIRCLE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><circle cx="12" cy="10" r="3"/><path d="M6.6 18.2c1.3-2 3.2-3 5.4-3s4.1 1 5.4 3"/></svg>';
 import {
   createStepFlow, showStep, showSwipeUp, showFeeEditor, SWIPE_UP_LABELS, stepNoteHtml, stepChipsHtml, choicePillsHtml,
   bindKeypad, applyKeypadKey, keypadAmountEntryHtml, paintKeypadAmountEntry, reviewAmountHtml, reviewRowHtml,
@@ -429,7 +434,27 @@ export function showSend(opts) {
   const applyRequestLink = (text) => {
     const request = parsePaymentRequestLink(text);
     if (!request || opts.compound) return false;
+    // one of your own requests opens as Your Payment Request, not as a send (K iOS
+    // PaymentRequestSheetPresenter / OwnPaymentRequestView)
+    if (isOwnPaymentRequest(request)) {
+      showOwnPaymentRequest(request);
+      state.recipientInput = "";
+      const field = handle?.el?.querySelector("#recipient");
+      if (field) field.value = "";
+      return true;
+    }
     state.request = request;
+    // who made it: their .kachat name, checked on chain before the seal turns green (K iOS)
+    state.requester = null;
+    if (request.creator) {
+      const creator = request.creator;
+      requesterName(creator).then((found) => {
+        if (state.request?.creator !== creator) return;
+        state.requester = found;
+        const box = handle?.el?.querySelector("#send-request");
+        if (box) box.innerHTML = unitText(requestHtml()); else paint();
+      });
+    }
     state.recipientInput = request.address;
     const input = handle?.el?.querySelector("#recipient");
     if (input) input.value = request.address;
@@ -458,9 +483,14 @@ export function showSend(opts) {
   const requestHtml = () => {
     const r = state.request;
     if (!r) return "";
+    // "Requested by" over the requester's card (K iOS PaymentRequestSummary): the seal is green only
+    // once their .kachat name resolves back to them on chain; your saved name for them otherwise
     const saved = r.creator ? entryFor(r.creator) : null;
+    const who = state.requester;
+    const verified = Boolean(who?.verified);
     const maker = r.creator
-      ? `<div class="sk-status good">${ICONS.checkFill}<span>Requested by ${esc(saved ? entryName(saved) : short(r.creator))}</span></div>
+      ? `<div class="sk-status ${verified ? "good" : ""}">${verified ? SEAL_FILL : PERSON_CIRCLE}<span>Requested by</span></div>
+         ${addressResolutionHtml({ address: r.creator, name: who?.name || (saved ? entryName(saved) : null) })}
          ${r.creator.toLowerCase() !== r.address.toLowerCase() ? '<div class="muted tiny">Signed by their chatting address. The payment goes to the address above.</div>' : ""}`
       : `<div class="sk-status bad">${ICONS.warning || ICONS.xCircle}<span>Not signed: who made this request can't be confirmed.</span></div>`;
     return `
@@ -468,7 +498,7 @@ export function showSend(opts) {
         <div class="sk-label">Requested</div>
         <div class="strong">${esc(`${paymentRequestAmountText(r)} ${KAS_UNIT}`)}</div>
         ${r.memo ? `<div class="small">${esc(r.memo)}</div>` : ""}
-        ${r.toChattingAddress ? '<div class="muted tiny">Sent as a plain payment: the memo is for you only.</div>' : ""}
+        <div class="muted tiny">${r.toChattingAddress ? "Sent as a plain payment: the memo is for you only." : "Paid to their spending address."}</div>
         ${maker}
       </div>`;
   };
@@ -1022,8 +1052,18 @@ export function showSend(opts) {
   flow.go(opts.compound ? "review" : (state.request || state.recipientInput ? afterRecipient() : "to"));
   load();
   loadChatting().then(() => paint());
-  // the recipient card marks one of your own addresses (iOS 56f004f)
-  loadOwnAddresses().then((changed) => { if (changed) paint(); });
+  // the recipient card marks one of your own addresses (iOS 56f004f); a request link it opened with
+  // that turns out to be your own shows as Your Payment Request instead (K iOS)
+  loadOwnAddresses().then((changed) => {
+    if (state.request && isOwnPaymentRequest(state.request)) {
+      const own = state.request;
+      clearRequest();
+      showOwnPaymentRequest(own);
+      flow.go("to");
+      return;
+    }
+    if (changed) paint();
+  });
 }
 
 function friendlySendError(error) {
@@ -1098,4 +1138,32 @@ export function showCoinControl({ coins, selected, labels = {}, unavailable = ()
     }
   };
   paint();
+}
+
+/** Your Payment Request (K iOS OwnPaymentRequestView): one of your own requests, opened - what it
+ *  asks for, where it pays into, and Copy / Share to hand it out again. Nothing is sent. */
+function showOwnPaymentRequest(request) {
+  const memo = String(request.memo || "").trim();
+  const link = paymentRequestUniversalLink(request);
+  const handle = openPanel({
+    title: "Your Payment Request", trailing: "Done", stack: true,
+    body: `
+      <div class="own-request">
+        <div class="req-qr-amount">${esc(`${paymentRequestAmountText(request)} ${KAS_UNIT}`)}</div>
+        ${memo ? `<p class="muted center-text own-request-memo">${esc(memo)}</p>` : ""}
+        <div class="ss-label own-request-label">${request.toChattingAddress ? "Paid to your chatting address" : "Paid to your spending address"}</div>
+        ${addressResolutionHtml({ address: request.address, name: ownAddressLabel(request.address) })}
+        <p class="muted small">${request.toChattingAddress
+          ? "The payment lands in your chat with whoever pays, with the memo."
+          : "Paid to a brand-new address of yours, used for this request only. The memo shows to whoever pays, but doesn't travel with the payment."}</p>
+        <button type="button" class="ss-continue own-request-copy" id="own-copy">Copy Payment Request</button>
+        ${navigator.share ? `<button type="button" class="req-share" id="own-share">${ICONS.share}<span>Share</span></button>` : ""}
+      </div>`,
+  });
+  const copy = handle.panel.querySelector("#own-copy");
+  copy.onclick = async () => {
+    try { await navigator.clipboard.writeText(link); copy.textContent = "Copied"; } catch { toast("Clipboard unavailable."); }
+  };
+  const share = handle.panel.querySelector("#own-share");
+  if (share) share.onclick = () => navigator.share({ url: link }).catch(() => {});
 }

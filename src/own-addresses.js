@@ -7,6 +7,7 @@ import * as wallet from "./wallet.js";
 import * as vault from "./vault.js";
 
 let labels = new Map(); // address -> label
+let chatting = "";       // this account's chatting address, lowercased
 let loadedKey = "";
 
 /** Loads (or refreshes) this account's own addresses; resolves true when the list changed. */
@@ -21,6 +22,7 @@ export async function loadOwnAddresses() {
     if (main) next.set(main.toLowerCase(), "Chatting Address");
     for (const r of list.rows) next.set(r.address.toLowerCase(), r.label || `Address #${r.index}`);
     labels = next;
+    chatting = String(main || "").toLowerCase();
     loadedKey = key;
     return true;
   } catch {
@@ -31,4 +33,12 @@ export async function loadOwnAddresses() {
 /** "Chatting Address", "Address #3" or its name when `address` is this wallet's own, else null. */
 export function ownAddressLabel(address) {
   return labels.get(String(address || "").trim().toLowerCase()) ?? null;
+}
+
+/** Whether a payment request is one of yours (K iOS PaymentRequest.isOwn): made by your chatting
+ *  address, or paying into one of your own addresses. Answers from the last load. */
+export function isOwnPaymentRequest(request) {
+  if (!request) return false;
+  if (request.creator && chatting && String(request.creator).toLowerCase() === chatting) return true;
+  return labels.has(String(request.address || "").trim().toLowerCase());
 }

@@ -22,7 +22,8 @@ import { dotkCanonical, kaspaNamesCanonical } from "./names-normalize.js";
 import { esc, ICONS } from "./ui.js";
 import { IS_TESTNET, MAINNET_KNS, TESTNET_KNS } from "./net.js";
 import { kachatRegistry, kachatService, kachatLaunched } from "./kachat-names.js";
-import { resolveHeldChecked } from "./kachat-resolve.js";
+import { resolveHeldChecked, confirmLiveOnChain } from "./kachat-resolve.js";
+import { Status } from "../shared/engine/kachat-names/registry-state.js";
 import { normalize as kachatNormalize, isValid as kachatIsValid } from "../shared/engine/kachat-names/codec.js";
 import { KachatNamesRegistry } from "../shared/engine/kachat-names/registry.js";
 import { logInfo } from "./log.js";
@@ -344,5 +345,32 @@ async function ownsKachatName(address) {
     return (await registry.heldNames(key)).length > 0;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Who made a payment request (K iOS RequestedByHeader): `address`'s .kachat name, and whether it
+ * checks out - the name resolves back to this key, isn't lapsed, and its record is on the chain right
+ * now. The signature proves the address only; the name is the registry's answer for it, so the
+ * green seal waits for the name itself. -> { name: "alice.kachat" | null, verified }. Never throws.
+ */
+export async function requesterName(address) {
+  const registry = kachatRegistry();
+  if (!registry || !address) return { name: null, verified: false };
+  let label = null;
+  try { label = (await registry.identity(address))?.label ?? null; } catch { label = null; }
+  if (!label) return { name: null, verified: false };
+  const name = kachatLabel(label);
+  try {
+    const owner = KachatNamesRegistry.keyOf(String(address).toLowerCase());
+    const found = await registry.lookup(label);
+    const info = found?.kind === "registered" ? found.info : null;
+    const ok = info && owner && info.name === kachatNormalize(label) && info.owner === owner
+      && info.status(registry.graceMs, BigInt(Date.now())) !== Status.lapsed;
+    if (!ok) return { name, verified: false };
+    await confirmLiveOnChain(registry, info, kachatService());
+    return { name, verified: true };
+  } catch {
+    return { name, verified: false };
   }
 }
