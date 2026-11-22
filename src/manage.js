@@ -56,6 +56,7 @@ import { kachatWordmark } from "./market.js";
 import { addressNamesTab, showLiveNameDetail } from "./kachat-live.js";
 import { addressDomainsTab } from "./address-domains.js";
 import { kachatRegistry } from "./kachat-names.js";
+import { kachatLabel } from "./kachat-label.js";
 import { followAccount } from "./approve.js";
 import { carryAccountData } from "./account-data.js";
 import { shownActiveAccount, SWITCHED_ELSEWHERE } from "./account-scope.js";
@@ -1079,6 +1080,20 @@ function showVisibility({ onBack }) {
 // family - a KNS domain or a funded balance. Scans 50 at a time; lists an index when it holds
 // Kaspa or domains, or is #0, or is the current one.
 
+/** Each candidate's .kachat names (K iOS NameServicesClient.kachatNames(of:)): the registry's batch
+ *  identity read, else one read per address; none where the registry isn't live. */
+async function addKachatNames(rows) {
+  const registry = kachatRegistry();
+  if (!registry || !rows.length) return;
+  let found = null;
+  try { found = await registry.identities(rows.map((r) => r.address)); } catch { found = null; }
+  for (const row of rows) {
+    let identity = found?.get(String(row.address).toLowerCase()) ?? null;
+    if (!found) { try { identity = await registry.identity(row.address); } catch { identity = null; } }
+    row.kachatNames = Array.isArray(identity?.names) ? identity.names : [];
+  }
+}
+
 function showChattingAddressPicker({ onBack, onChanged }) {
   const state = { rows: [], scanned: 0, scanning: false, current: 0, error: "", scansFurther: true };
   const pickerBack = () => { state.scanning = false; paint(); };
@@ -1091,25 +1106,27 @@ function showChattingAddressPicker({ onBack, onChanged }) {
       const { rows, currentIndex, scansFurther } = await wallet.scanIdentityAddresses(state.scanned, 50);
       state.current = currentIndex;
       state.scansFurther = scansFurther !== false;
+      await addKachatNames(rows);
       state.rows.push(...rows);
       state.scanned += 50;
     } catch {
-      state.error = "Could not derive addresses from this seed. Please try again.";
+      state.error = "Could not derive addresses from these words. Please try again.";
     }
     state.scanning = false;
     if (app.dataset.screen === "identity-picker") paint();
   };
 
   const paint = () => {
-    const nameCount = (r) => (r.domains?.length || 0) + (r.otherNames?.length || 0);
-    const onlyName = (r) => (nameCount(r) === 1 ? (r.domains?.[0]?.fullName || r.otherNames?.[0]?.display) : null);
+    // .kachat names count too, and name the row first (K iOS ChattingAddressCandidate)
+    const nameCount = (r) => (r.kachatNames?.length || 0) + (r.domains?.length || 0) + (r.otherNames?.length || 0);
+    const onlyName = (r) => (nameCount(r) === 1 ? (r.kachatNames?.[0] ? kachatLabel(r.kachatNames[0]) : r.domains?.[0]?.fullName || r.otherNames?.[0]?.display) : null);
     const shown = state.rows.filter((r) => r.balanceSompi > 0n || nameCount(r) > 0 || r.index === 0 || r.index === state.current);
     render(`
       ${navHeader({ title: "Chatting Address" })}
       <section class="screen manage">
         <div class="source-head">
           <h2>Choose Your Chatting Address</h2>
-          <p class="muted">If this seed already holds your identity at a different address - a domain (.kas, .k or .kaspa) or a funded chatting balance - pick it here. Only addresses with a balance or domains are shown.</p>
+          <p class="muted">If these words already hold your identity at a different address - a domain (.kachat, .kas, .k or .kaspa) or a funded chatting balance - pick it here. Only addresses with a balance or domains are shown.</p>
         </div>
         <div class="glass list">
           ${shown.map((row) => `
@@ -1150,12 +1167,15 @@ function showIdentityDetail({ row, current, onBack, onChanged }) {
       <button class="manage-address mono" id="copy">${esc(row.address)}</button>
       <p class="muted tiny center-text">Tap the address to copy it</p>
       <div class="glass list"><div class="list-row"><span>Balance</span><span>${esc(wallet.formatKas(row.balanceSompi, 8))} KAS</span></div></div>
-      ${row.domains?.length ? `
-        <div class="section-header">.kas Names (${row.domains.length})</div>
-        ${row.domains.map((d) => `<div class="domain-card small-card"><span class="domain-name">${esc(d.fullName)}</span>${String(d.fullName).toLowerCase() === String(row.primaryDomain || "").toLowerCase() ? '<span class="domain-badge">Primary</span>' : ""}</div>`).join("")}` : ""}
+      ${row.kachatNames?.length ? `
+        <div class="section-header">.kachat Names (${row.kachatNames.length})</div>
+        ${row.kachatNames.map((n) => `<div class="domain-card small-card"><span class="domain-name">${esc(kachatLabel(n))}</span></div>`).join("")}` : ""}
       ${row.otherNames?.length ? `
         <div class="section-header">.k and .kaspa Names (${row.otherNames.length})</div>
         ${row.otherNames.map((n) => `<div class="domain-card small-card"><span class="domain-name">${esc(n.display)}</span>${n.provisional ? '<span class="domain-badge">Settling</span>' : ""}</div>`).join("")}` : ""}
+      ${row.domains?.length ? `
+        <div class="section-header">.kas Names (${row.domains.length})</div>
+        ${row.domains.map((d) => `<div class="domain-card small-card"><span class="domain-name">${esc(d.fullName)}</span>${String(d.fullName).toLowerCase() === String(row.primaryDomain || "").toLowerCase() ? '<span class="domain-badge">Primary</span>' : ""}</div>`).join("")}` : ""}
       <p class="error" id="error"></p>
       <div class="spacer"></div>
       <button id="set" ${isCurrent ? "disabled" : ""}>${isCurrent ? "Current Chatting Address" : "Set as Chatting Address"}</button>
