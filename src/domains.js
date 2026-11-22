@@ -10,7 +10,9 @@
 //   send     recipient (address or a name on any service, with "Other domains"), Normal /
 //            Fast / Priority fee on 0.02 KAS, the two-transaction progress sheet, the Sent sheet
 //
-// Left out on purpose: inscribing and profile editing. Profiles are moving to .kachat names.
+// Left out on purpose: inscribing and profile editing. Only .kachat names carry a profile; .kas, .k and
+// .kaspa are for viewing, sending, receiving and lookups only (the owner, 2026-11-22: K iOS's .kas
+// Customize Profile stays out).
 
 import { remember, selectTab } from "./dock.js";
 import * as wallet from "./wallet.js";
