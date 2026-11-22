@@ -27,7 +27,7 @@ import {
   keypadAmountEntryHtml, paintKeypadAmountEntry, reviewAmountHtml,
 } from "./send-steps.js";
 import {
-  PAYMENT_REQUEST_MEMO_LIMIT, makePaymentRequest, signPaymentRequest, paymentRequestUniversalLink, paymentRequestKaPayLink, clampMemoText, memoCharacters,
+  PAYMENT_REQUEST_MEMO_LIMIT, makePaymentRequest, signPaymentRequest, paymentRequestUniversalLink, clampMemoText, memoCharacters,
 } from "../shared/engine/payment-request.js";
 
 const short = (a) => `${a.slice(0, 14)}...${a.slice(-6)}`;
@@ -302,8 +302,8 @@ export function showRequestPayment(opts = {}) {
   };
 
   /** Show Request As QR (KaPay iOS 0e05064 PaymentRequestQRSheet): the same signed request Copy and
-   *  Share give out, as a kapay://pay/ QR - an iPhone's camera opens KaPay on Send with everything
-   *  filled in. */
+   *  Share give out, as its kachat.app link (K iOS: KaPay's kapay:// scheme is retired) - an iPhone's
+   *  camera opens K on Send with everything filled in. */
   const showQr = async () => {
     if (state.working) return;
     state.working = true;
@@ -325,7 +325,7 @@ export function showRequestPayment(opts = {}) {
         </div>`,
     });
     import("qrcode")
-      .then(({ default: QRCode }) => QRCode.toCanvas(handle.panel.querySelector(".req-qr-code"), paymentRequestKaPayLink(request), { width: 520, margin: 1, color: { dark: "#000000", light: "#ffffff" } }))
+      .then(({ default: QRCode }) => QRCode.toCanvas(handle.panel.querySelector(".req-qr-code"), paymentRequestUniversalLink(request), { width: 520, margin: 1, color: { dark: "#000000", light: "#ffffff" } }))
       .catch(() => toast("Couldn't draw the QR code."));
   };
 

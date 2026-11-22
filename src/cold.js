@@ -26,7 +26,7 @@ import * as vault from "./vault.js";
 import * as dock from "./dock.js";
 import { getLocal, setLocal, removeLocal } from "./browser.js";
 import {
-  app, esc, render, $, toast, copyText, ICONS, navHeader, showQr, showSheet, showAlert, groupedKas8, RECEIVE_NOTES, balanceCardHtml,
+  app, esc, render, $, toast, copyText, copySecret, ICONS, navHeader, showQr, showSheet, showAlert, groupedKas8, RECEIVE_NOTES, balanceCardHtml,
 } from "./ui.js";
 import { scanQr } from "./camera.js";
 import { kachatWordmark } from "./market.js";
@@ -470,13 +470,10 @@ export function showColdStorage() {
   }
 }
 
-async function copyKpub(kpub) {
-  try {
-    await navigator.clipboard.writeText(kpub);
-    toast("kpub copied to clipboard.");
-  } catch {
-    toast("Couldn't copy - select and copy it instead");
-  }
+/** A kpub reveals every address of the account: copied like a secret, cleared 30 s later (K iOS
+ *  ColdStorageClipboard.copyKpub). */
+function copyKpub(kpub) {
+  return copySecret(kpub, "kpub copied to clipboard. Clipboard will clear in 30s.");
 }
 
 // iOS ColdStorageKpubQRView: a white page, the kpub's QR (error correction L) in the accent
@@ -799,10 +796,7 @@ function showAccount({ accountId, onBack }) {
             <span class="mono cold-kpub">${esc(account.kpub)}</span>
             <button class="link-button cold-copy-kpub" id="copy-kpub">${SF.docSmall}<span>Copy kpub</span></button>
           </div>
-          <div class="tx-meta">
-            <span class="muted cold-caption">Total Balance</span>
-            <span class="cold-total">${!state.entries ? '<span class="spinner small-spin"></span>' : unread ? '<span class="muted">—</span>' : `${esc(groupedKas8(total))} KAS`}</span>
-          </div>
+          ${balanceCardHtml({ label: "Total Balance", sompi: state.entries ? total : null, unknown: Boolean(state.entries) && Boolean(unread), fiatText: state.entries && !unread ? fiatTextFor(total, repaintIfHere) : "" })}
           <button class="ios-capsule" id="address-actions" ${busy ? "disabled" : ""}>${busy ? '<span class="spinner dark-spinner small-spin"></span>' : "Address Actions"}</button>
         </div>
         ${state.loading && !state.entries ? '<div class="center-text cold-loading"><span class="spinner"></span></div>'

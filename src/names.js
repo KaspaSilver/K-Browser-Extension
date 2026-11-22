@@ -16,6 +16,7 @@
 
 import { normalizeDomainLabel } from "../shared/engine/kns.js";
 import { validOnActiveNetwork } from "./address-rules.js";
+import { kachatLabel } from "./kachat-label.js";
 import { getEndpoint } from "../shared/engine/endpoints.js";
 import { dotkCanonical, kaspaNamesCanonical } from "./names-normalize.js";
 import { esc, ICONS } from "./ui.js";
@@ -134,7 +135,8 @@ async function resolveKaspaNames(label) {
 async function resolveKachat(label) {
   const canonical = kachatNormalize(label);
   if (!kachatIsValid(canonical)) return null;
-  const display = `${canonical}.kachat`;
+  // written as Show .kachat Endings says (K iOS NameServices: KachatNameLabel.display)
+  const display = kachatLabel(canonical);
   const registry = kachatRegistry();
   if (!registry) return { tld: "kachat", display, address: null, failed: false, notLive: true };
   try {

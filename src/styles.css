@@ -1281,3 +1281,6 @@ body.dock-on #app[data-screen="settings"] .form > * { flex-shrink: 0; }
 .about-price-row > span:not(:first-child) { text-align: right; }
 .about-price-head { border-top: 0; font-size: 11px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); }
 .about-price-note { margin: 0; padding: 10px 16px 8px; border-top: .5px solid var(--line); }
+
+/* Cold Storage's account header holds the balance card itself (K iOS KaspaAddressBalanceCard). */
+.cold-summary .bal-card { margin: 0; }

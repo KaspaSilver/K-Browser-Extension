@@ -545,6 +545,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     if (here()) paint();
     probeUsed();
     probeDomains();
+    probeChatting();
     probeQuantumSpent();
   };
 
@@ -580,6 +581,21 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     await Promise.all(Array.from({ length: 8 }, worker));
   };
 
+  // the chatting address's Used and Contains domain tags (K iOS ManageAddressesView)
+  const probeChatting = async () => {
+    const address = state.chatting?.address;
+    if (!address) return;
+    if (!domainOwners.has(address)) {
+      try { domainOwners.set(address, (await wallet.domains(address)).domains.length > 0); } catch { /* leave unknown */ }
+    }
+    if (state.chatting?.balance > 0n) state.used.set(address, true);
+    else if (!state.used.has(address)) {
+      const used = (await wallet.knownUsedState(address)) ?? (await wallet.addressUsed(address).catch(() => null));
+      if (used != null) state.used.set(address, used);
+    }
+    if (here()) paint();
+  };
+
   const probeDomains = async () => {
     const queue = visibleRows().filter((r) => !domainOwners.has(r.address));
     const worker = async () => {
@@ -593,7 +609,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     await Promise.all(Array.from({ length: 4 }, worker));
     // .kachat names count too, where the registry is live (iOS 881ada6 ownersOfNames).
     try {
-      const owners = await kachatRegistry()?.ownersOfNames(visibleRows().map((r) => r.address));
+      const owners = await kachatRegistry()?.ownersOfNames([...visibleRows().map((r) => r.address), ...(state.chatting?.address ? [state.chatting.address] : [])]);
       for (const address of owners || []) domainOwners.set(address, true);
     } catch { /* not tagged */ }
     if (here()) paint();
@@ -755,6 +771,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
               ${chattingUnread
                 ? '<span class="muted small">Couldn\'t load the coins at this address</span>'
                 : `<span class="strong small">${esc(groupedKas8(state.chatting.balance))} KAS</span>`}
+              ${state.used.get(state.chatting.address) === true || domainOwners.get(state.chatting.address) ? `<span class="address-status">${state.used.get(state.chatting.address) === true ? '<span class="used-badge used">Used</span>' : ""}${domainOwners.get(state.chatting.address) ? '<span class="domain-tag">Contains domain</span>' : ""}</span>` : ""}
             </div>
           </div>` : "";
     const busy = Boolean(state.discovery) || Boolean(state.busy?.startsWith?.("generate"));

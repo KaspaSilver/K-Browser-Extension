@@ -4,6 +4,7 @@
 // dock tab) in settings.js.
 
 import { ext, isExtension, tellBackground } from "./browser.js";
+import "./kachat-label.js";
 import * as vault from "./vault.js";
 import * as wallet from "./wallet.js";
 import {
