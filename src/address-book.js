@@ -369,6 +369,9 @@ export function setAddressBookSend(fn) { openSend = fn; }
  * Add Contact / Edit Contact (iOS AddressBookEditor): the photo, the name, the address
  * (Paste, Scan QR) and a note. `address` prefills a new entry (Send's "save this address").
  */
+// xmark.circle.fill: clears the name field (K iOS AddressBookEntryEditor)
+const CLEAR_X = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M9 9l6 6M15 9l-6 6" stroke="var(--panel, #1c1c1e)" stroke-width="2.2" stroke-linecap="round"/></svg>';
+
 export function openEditor({ existing = null, address = "", name = "", onSaved = () => {}, onRemoved = () => {} } = {}) {
   const form = {
     name: existing?.name ?? name,
@@ -398,13 +401,41 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
       form.resolving = false;
       form.resolutions = results;
       const primary = primaryResolution(results, typed);
-      if (primary) form.resolved = { address: primary.address, domain: primary.display };
+      if (primary) form.resolved = { address: primary.address, domain: primary.display, tld: primary.tld };
       else { form.resolveError = notFoundMessage(typed, results); form.othersOpen = results.some((r) => r.address); }
       paintStatus();
     }, 350);
   };
+  /** What "Use Their Domain Name" fills in (K iOS domainSuggestion): the typed domain that
+   *  resolved, in full ("alice.kachat", whatever Show .kachat Endings says - the book is shared with
+   *  K), never a .kas one (K clears .kas names from contacts). The address's own .kachat name isn't
+   *  looked up: a saved address is never sent to a server here (EXT-011). */
+  const domainSuggestion = () => {
+    const r = form.resolved;
+    if (!r?.address || !r.tld || r.tld === "kas") return null;
+    const shown = String(r.domain || "");
+    return shown.toLowerCase().endsWith(`.${r.tld}`) ? shown : `${shown}.${r.tld}`;
+  };
+  // Save needs a name and an address (K iOS: disabled while the name is empty)
+  const canSave = () => Boolean(form.name.trim()) && Boolean((form.resolved?.address || form.address).trim()) && !form.resolving;
+  const paintNameExtras = () => {
+    const panel = handle?.panel;
+    if (!panel) return;
+    const suggestion = domainSuggestion();
+    const box = panel.querySelector("[data-ab-suggest]");
+    if (box) {
+      box.hidden = !suggestion || form.name.trim() === suggestion;
+      box.innerHTML = suggestion ? `${ICONS.at}<span>Use Their Domain Name <span class="muted">(${esc(suggestion)})</span></span>` : "";
+    }
+    const clear = panel.querySelector("#ab-name-clear");
+    if (clear) clear.hidden = !form.name;
+    const save = panel.querySelector("#ab-save");
+    if (save) save.disabled = !canSave();
+  };
+
   /** The line under the address field: the typed domain's address, or why it has none. */
   const paintStatus = () => {
+    paintNameExtras();
     const host = handle?.panel.querySelector("[data-ab-resolve]");
     if (!host) return;
     host.innerHTML = form.resolving
@@ -417,7 +448,7 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
         onToggle: () => { form.othersOpen = !form.othersOpen; paintStatus(); },
         onPick: (tld) => {
           const pick = form.resolutions.find((r) => r.tld === tld && r.address);
-          if (pick) { form.resolved = { address: pick.address, domain: pick.display }; form.othersOpen = false; paintStatus(); }
+          if (pick) { form.resolved = { address: pick.address, domain: pick.display, tld: pick.tld }; form.othersOpen = false; paintStatus(); }
         },
       });
     }
@@ -443,7 +474,13 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
       </div>
       <div class="form-section">
         <div class="form-header">Name</div>
-        <div class="form-card"><input class="form-row" id="ab-name" value="${esc(form.name)}" placeholder="Name" maxlength="60" autocomplete="off" /></div>
+        <div class="form-card">
+          <div class="form-row ab-name-row">
+            <input id="ab-name" value="${esc(form.name)}" placeholder="Name" maxlength="60" autocomplete="off" />
+            <button type="button" class="icon plain ab-name-clear" id="ab-name-clear" aria-label="Clear" ${form.name ? "" : "hidden"}>${CLEAR_X}</button>
+          </div>
+          <button type="button" class="form-row ab-suggest" data-ab-suggest hidden></button>
+        </div>
       </div>
       <div class="form-section">
         <div class="form-header">Address</div>
@@ -469,7 +506,17 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
       </div></div>` : ""}`;
     const bind = (id, fn) => { const el = host.querySelector(`#${id}`); if (el) fn(el); };
     paintStatus();
-    bind("ab-name", (el) => { el.oninput = () => { form.name = el.value; }; });
+    bind("ab-name", (el) => { el.oninput = () => { form.name = el.value; paintNameExtras(); }; });
+    bind("ab-name-clear", (el) => { el.onclick = () => { form.name = ""; const input = host.querySelector("#ab-name"); if (input) { input.value = ""; input.focus(); } paintNameExtras(); }; });
+    const suggest = host.querySelector("[data-ab-suggest]");
+    if (suggest) suggest.onclick = () => {
+      const value = domainSuggestion();
+      if (!value) return;
+      form.name = value;
+      const input = host.querySelector("#ab-name");
+      if (input) input.value = value;
+      paintNameExtras();
+    };
     bind("ab-note", (el) => { el.oninput = () => { form.note = el.value; }; });
     bind("ab-address", (el) => { el.oninput = () => { form.address = el.value; resolveTyped(); }; });
     bind("ab-paste", (el) => { el.onclick = async () => { try { form.address = (await navigator.clipboard.readText()).trim(); } catch { toast("Clipboard unavailable - paste with ⌘V instead."); } paint(); resolveTyped(); }; });
@@ -495,7 +542,7 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
     bind("ab-save", (el) => {
       el.onclick = async () => {
         try {
-          if (form.resolving) return;
+          if (form.resolving || !canSave()) return;
           // a typed domain saves the address it resolved to
           const address = form.resolved?.address || form.address;
           const saved = await save({ address, name: form.name, note: form.note, photo: form.photo });

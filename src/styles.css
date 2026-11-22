@@ -1284,3 +1284,13 @@ body.dock-on #app[data-screen="settings"] .form > * { flex-shrink: 0; }
 
 /* Cold Storage's account header holds the balance card itself (K iOS KaspaAddressBalanceCard). */
 .cold-summary .bal-card { margin: 0; }
+
+/* Contacts editor (K iOS AddressBookEntryEditor): the name with a clear button, and Use Their Domain
+   Name under it once a typed domain resolved. */
+.ab-name-row { display: flex; align-items: center; gap: 8px; }
+.ab-name-row input { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0; box-shadow: none; }
+.ab-name-clear { color: var(--muted); padding: 2px; }
+.ab-name-clear[hidden], .ab-suggest[hidden] { display: none; }
+.ab-suggest { display: flex; align-items: center; gap: 8px; width: 100%; background: transparent; color: var(--kaspa); font: inherit; font-size: 14px; text-align: left; cursor: pointer; border-top: .5px solid var(--line); }
+.ab-suggest svg { width: 16px; height: 16px; flex: none; }
+#ab-save:disabled { opacity: .4; cursor: default; }
