@@ -749,7 +749,7 @@ function showAccount({ accountId, onBack }) {
   const removeAccount = () => {
     showAlert({
       title: "Remove Cold Storage Account",
-      message: "This only removes it from KaPay's watch list. It has no effect on the KasSigner device or any funds it holds.",
+      message: "This only removes it from K's watch list. It has no effect on the KasSigner device or any funds it holds.",
       confirmLabel: "Remove",
       cancelLabel: "Cancel",
       onConfirm: async () => {

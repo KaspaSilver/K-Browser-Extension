@@ -19,7 +19,7 @@ export function setShownAccount(next) {
 /** `{ id, address }` of the account this window shows; both null when none. */
 export const shownAccount = () => ({ ...shown });
 
-export const SWITCHED_ELSEWHERE = "You switched accounts in another KaPay window. Check the Wallet tab and try again.";
+export const SWITCHED_ELSEWHERE = "You switched accounts in another K window. Check the Wallet tab and try again.";
 
 /**
  * The shown account from a fresh `vault.readAccounts()` view, or an Error when it can't be acted on:

@@ -72,13 +72,14 @@ function shortAddr(address) {
 
 // --- welcome / create / import -----------------------------------------------------------
 
-// The KaPay wordmark with the app mark beside it - iOS OnboardingView.titleSection. KaPay's name
-// says what it is, so the welcome has no tagline under it (KaPay iOS 089a03f / 5bab351); unlocking
-// keeps its instruction.
-function wordmarkHtml(tagline = "") {
+// The K globe (K iOS 58cfbf6f OnboardingView.titleSection: the app icon's mark, KLogo), glowing
+// like the icon, over the motto - smaller when saved accounts share the page. Unlocking shows its
+// instruction instead of the motto.
+const K_MOTTO = "Digital Freedom on the Kaspa Network";
+function wordmarkHtml(tagline = K_MOTTO, { compact = false } = {}) {
   return `
     <div class="hero">
-      <div class="wordmark"><h1>KaPay</h1><img src="icons/kapay-logo.png" alt="KaPay logo" /></div>
+      <img class="k-logo ${compact ? "compact" : ""}" src="icons/k-logo.png" alt="K" />
       ${tagline ? `<p class="tagline">${esc(tagline)}</p>` : ""}
     </div>`;
 }
@@ -103,7 +104,7 @@ export async function showWelcome() {
   render(`
     <section class="onboard">
       <button class="icon onboard-gear" id="app-settings" aria-label="App Settings" title="App Settings">${ICONS.gearshape}</button>
-      ${wordmarkHtml()}
+      ${wordmarkHtml(K_MOTTO, { compact: saved.length > 0 })}
       ${saved.length ? `
         <div class="saved">
           <div class="saved-header">Saved Accounts</div>
@@ -306,7 +307,7 @@ async function savingAccount(account, save) {
     if (!address) throw new Error("Couldn't set up this account's backup reminder, so it wasn't created. Try again.");
     backupStatus.markPending(address);
     if (!backupStatus.isPending(address)) {
-      throw new Error("This browser's storage for KaPay is full, so the account wasn't created: it couldn't remember that its 12 or 24 words still need backing up. Free up some space and try again.");
+      throw new Error("This browser's storage for K is full, so the account wasn't created: it couldn't remember that its 12 or 24 words still need backing up. Free up some space and try again.");
     }
   }
   let view;
@@ -543,7 +544,7 @@ function mountAddressPreview({ flow, typed, onSearching = () => {} }) {
     if (other) {
       const otherSompi = found.filter((row) => !sameChoice(flow.choice, row)).reduce((sum, row) => sum + BigInt(row.balanceSompi || 0n), changeSompi);
       other.hidden = !(searches && !searching && flow.choice && otherSompi > 0n);
-      if (!other.hidden) other.textContent = `Other addresses of these words hold ${wallet.formatKas(otherSompi, 8)} KAS more. KaPay tracks only the address picked here.`;
+      if (!other.hidden) other.textContent = `Other addresses of these words hold ${wallet.formatKas(otherSompi, 8)} KAS more. K tracks only the address picked here.`;
     }
     every.innerHTML = searches && !searching && everyType.length && !showsEveryType
       ? '<button type="button" class="link-button small" id="every-type">See Every Wallet Type</button>' : "";
@@ -707,7 +708,7 @@ function showImportFound(flow) {
     ${navHeader({ title: "Import Account" })}
     <section class="screen passphrase-entry">
       <h2>Your Account</h2>
-      <p class="muted">KaPay checks your words against every kind of Kaspa wallet, so you don't need to know which one they came from.</p>
+      <p class="muted">K checks your words against every kind of Kaspa wallet, so you don't need to know which one they came from.</p>
       ${ADDRESS_PREVIEW_HTML}
       <p class="error" id="error"></p>
       <button id="continue" class="big" disabled>Import</button>
@@ -997,7 +998,7 @@ function showSetPassword(account, onBack, buttonLabel = "Create Account") {
     ${navHeader({ title: "Wallet Password" })}
     <section class="screen">
       <h2>Set a wallet password</h2>
-      <p class="muted">This password unlocks KaPay in this browser and keeps your 12 or 24 words encrypted on this computer. It can't recover your account - only your 12 or 24 words can.</p>
+      <p class="muted">This password unlocks K in this browser and keeps your 12 or 24 words encrypted on this computer. It can't recover your account - only your 12 or 24 words can.</p>
       <input id="pw" type="password" autocomplete="new-password" placeholder="Password (at least ${vault.MIN_PASSWORD_LENGTH} characters)" aria-label="Password" autofocus />
       <input id="pw2" type="password" autocomplete="new-password" placeholder="Re-enter password" aria-label="Re-enter password" />
       <p class="error" id="error"></p>
@@ -1069,7 +1070,7 @@ function showReset() {
     <header class="topbar"><button class="icon" id="back" aria-label="Back">${ICONS.back}</button><div class="title">Reset wallet</div></header>
     <section class="screen">
       <p>Without the password, the only way back in is your 12 or 24 words.</p>
-      <p class="muted">Resetting removes KaPay's data from this browser. Your Kaspa stays on the network - import your 12 or 24 words afterwards to get it back. If you don't have them, resetting loses access for good.</p>
+      <p class="muted">Resetting removes K's data from this browser. Your Kaspa stays on the network - import your 12 or 24 words afterwards to get it back. If you don't have them, resetting loses access for good.</p>
       <label class="field">Type RESET to confirm
         <input id="confirm" autocomplete="off" autocapitalize="characters" />
       </label>

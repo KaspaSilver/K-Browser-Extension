@@ -271,7 +271,7 @@ function paintList() {
         <div class="ab-empty">
           <span class="accent">${contactCard(44, 1.6)}</span>
           <div class="strong">No contacts yet</div>
-          <p class="muted small">Save the Kaspa addresses you use with a name you'll recognize. They stay in KaPay, for this wallet only.</p>
+          <p class="muted small">Save the Kaspa addresses you use with a name you'll recognize. They stay in K, for this wallet only.</p>
           <button class="with-icon" id="ab-add-empty">${PLUS}<span>Add Contact</span></button>
         </div>`}
       <div class="fab-room"></div>
@@ -458,7 +458,7 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
       </div>
       <div class="form-section">
         <div class="form-card"><textarea class="form-row ab-note-input" id="ab-note" rows="3" placeholder="Note (optional)">${esc(form.note)}</textarea></div>
-        <div class="form-footer">Saved in KaPay for this wallet only.</div>
+        <div class="form-footer">Saved in K for this wallet only.</div>
         ${form.error ? `<div class="form-footer error-text">${esc(form.error)}</div>` : ""}
       </div>
       <div class="form-section"><div class="form-card">
@@ -628,7 +628,7 @@ function exportFile() {
     const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `KaPay Contacts ${stamp}.json`;
+    link.download = `KaChat Contacts ${stamp}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -654,8 +654,8 @@ async function importText(text) {
   const valid = addressed.filter((e) => !invalidReason(normalize(e.address)));
   if (!valid.length) {
     throw new Error(NETWORK === "testnet"
-      ? "Every address in that file is a Mainnet address. KaPay is on Testnet."
-      : "Every address in that file is a Testnet address. KaPay is on Mainnet.");
+      ? "Every address in that file is a Mainnet address. K is on Testnet."
+      : "Every address in that file is a Testnet address. K is on Mainnet.");
   }
   const skipped = addressed.length - valid.length;
   let added = 0;
@@ -692,7 +692,7 @@ function importFile() {
   if (!isTab) {
     showAlert({
       title: "Import File",
-      message: "Picking a file closes this popup. Open KaPay in a tab to import your contacts there.",
+      message: "Picking a file closes this popup. Open K in a tab to import your contacts there.",
       confirmLabel: "Open in Tab",
       cancelLabel: "Cancel",
       onConfirm: async () => {

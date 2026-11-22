@@ -52,7 +52,7 @@ const isApproval = params.get("view") === "approve";
 
 async function boot() {
   if (!isExtension) {
-    render('<section class="screen center"><p class="center-text">Open this page from the KaPay extension.</p></section>');
+    render('<section class="screen center"><p class="center-text">Open this page from the K extension.</p></section>');
     return;
   }
   await syncNetworkMirror();

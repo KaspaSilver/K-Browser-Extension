@@ -1,23 +1,23 @@
-# KaPay Extension - Chrome Web Store listing and review answers
+# K Extension - Chrome Web Store listing and review answers
 
-Everything the Chrome Web Store forms ask for, ready to paste. KaPay ships on Chrome and Brave
+Everything the Chrome Web Store forms ask for, ready to paste. K ships on Chrome and Brave
 only (owner, 2026-10-31): Brave installs straight from the Chrome Web Store, so one listing covers
 both.
 
 | | |
 |---|---|
-| Upload | `packages/kapay-extension-<version>-chromium.zip`, built with `npm run package` (it also writes Firefox files; ignore them) |
+| Upload | `packages/k-extension-<version>-chromium.zip`, built with `npm run package` (it also writes Firefox files; ignore them) |
 | Developer dashboard | https://chrome.google.com/webstore/devconsole |
-| Privacy policy URL | **https://home.kachat.app/privacy/** - Cyber Ventures LLC's one policy for every KaChat app; it names the KaPay Extension |
+| Privacy policy URL | **https://home.kachat.app/privacy/** - Cyber Ventures LLC's one policy for every KaChat app; it named the KaPay Extension: ask for it to say K Extension (renamed 2026-11-22) |
 | Every update | raise `version` in `public/manifest.json` and `package.json` together; the store refuses a version it has already seen |
 | Swap | works once the store's item ID (dashboard, after the first upload) is in `KAPAY_EXTENSION_IDS` on the desktop.kachat.app Pages project, followed by a redeploy (KaChat-Desktop Build 261, docs/CLOUDFLARE_PAGES.md). Until then Swap says "not available right now" |
 
 ## Store listing tab
 
-**Name:** KaPay Extension
+**Name:** K Extension
 
 **Summary (max 132 characters):**
-KaPay, the Kaspa wallet from KaChat. Send and receive KAS, manage addresses and domains, and connect to Kaspa websites.
+K, the Kaspa wallet. Send and receive KAS, manage addresses and domains, and connect to Kaspa websites.
 
 **Category:** Productivity > Tools (there is no finance category).
 
@@ -25,11 +25,11 @@ KaPay, the Kaspa wallet from KaChat. Send and receive KAS, manage addresses and 
 
 **Description:**
 
-KaPay brings the wallet from the KaPay and KaChat apps to your browser. Your 12 or 24 words open
-the same addresses as KaPay on iPhone and KaChat on iPhone, Android and desktop.
+K brings the wallet from the K app to your browser. Your 12 or 24 words open the same addresses
+as K on iPhone and KaChat on Android and desktop.
 
 - Create a new account in one tap, or import one from KaChat, KasWare, Kaspium, Kastle, KDX, OKX,
-  OneKey, Chainge, Ledger or the Kaspa CLI wallet: KaPay finds which kind from your words
+  OneKey, Chainge, Ledger or the Kaspa CLI wallet: K finds which kind from your words
 - Back up your 12 or 24 words step by step, with a check that your paper copy is right, and a
   Backup Hygiene check every six months
 - Send Kaspa step by step: a keypad for the amount, .kas and .kachat name lookup, Max, coin
@@ -50,12 +50,12 @@ the same addresses as KaPay on iPhone and KaChat on iPhone, Android and desktop.
 - Your 12 or 24 words are encrypted with your password and never leave your computer
 - No accounts, no tracking, no ads
 
-KaPay is self-custody: only you hold your keys. Keep your 12 or 24 words written down and
+K is self-custody: only you hold your keys. Keep your 12 or 24 words written down and
 safe - they are the only way to restore your wallet.
 
 **Graphics:**
 
-- Store icon: 128x128 - `public/icons/kapay-128.png`
+- Store icon: 128x128 - `public/icons/k-128.png`
 - Screenshots: 1280x800, one to five - `store-assets/screenshots/` (see Screenshots below)
 - Small promo tile (optional): 440x280
 

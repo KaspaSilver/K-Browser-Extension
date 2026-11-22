@@ -889,7 +889,7 @@ function importCsv() {
   if (!isTab) {
     showAlert({
       title: "Import CSV",
-      message: "Picking a file closes this popup. Open KaPay in a tab to import the CSV there.",
+      message: "Picking a file closes this popup. Open K in a tab to import the CSV there.",
       confirmLabel: "Open in Tab",
       cancelLabel: "Cancel",
       onConfirm: async () => {

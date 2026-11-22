@@ -128,11 +128,11 @@ async function balanceOf(address) {
 
 async function openApproval(origin, kind, params) {
   for (const entry of approvals.values()) {
-    if (entry.origin === origin) return { error: { code: -32002, message: "A request from this site is already waiting in KaPay." } };
+    if (entry.origin === origin) return { error: { code: -32002, message: "A request from this site is already waiting in K." } };
   }
   // just rejected: the site waits a moment before it can open another window (audit 2026-11-07)
   if (cooldownLeft(lastRejected.get(origin), Date.now()) > 0) {
-    return { error: { code: 4001, message: "The last request from this site was just rejected in KaPay. Wait a few seconds before asking again." } };
+    return { error: { code: 4001, message: "The last request from this site was just rejected in K. Wait a few seconds before asking again." } };
   }
   const id = crypto.randomUUID();
   const entry = { id, origin, kind, params, createdAt: Date.now(), windowId: null, done: false, keepWindow: false };
@@ -146,7 +146,7 @@ async function openApproval(origin, kind, params) {
     entry.windowId = win?.id ?? null;
   } catch {
     approvals.delete(id);
-    return { error: { code: 4900, message: "Couldn't open KaPay." } };
+    return { error: { code: 4900, message: "Couldn't open K." } };
   }
   const result = await answer;
   approvals.delete(id);
@@ -202,7 +202,7 @@ async function handleSiteRequest(method, params, origin) {
       return openApproval(origin, "signMessage", [message]);
     }
     default:
-      return { error: { code: 4200, message: `KaPay does not support ${String(method).slice(0, 40)}.` } };
+      return { error: { code: 4200, message: `K does not support ${String(method).slice(0, 40)}.` } };
   }
 }
 
@@ -231,7 +231,7 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const origin = siteOrigin(sender);
       if (!origin) { sendResponse({ error: { code: 4100, message: "Requests are only accepted from the page itself." } }); return false; }
       handleSiteRequest(String(message.method || ""), Array.isArray(message.params) ? message.params : [], origin)
-        .then(sendResponse, () => sendResponse({ error: { code: 4900, message: "KaPay hit an error." } }));
+        .then(sendResponse, () => sendResponse({ error: { code: 4900, message: "K hit an error." } }));
       return true;
     }
     case "approval-get": {
@@ -317,7 +317,7 @@ async function clearClipboard() {
 // (audit 2026-11-07). The sealed vault itself is no longer here: it lives in KaPay's own IndexedDB,
 // which a web page's process is never given (vault-store.js, audit 2026-11-13).
 function lockStorageToExtension() {
-  const failed = (error) => console.warn("[KaPay] storage.local could not be limited to KaPay's own pages:", error?.message || error);
+  const failed = (error) => console.warn("[KaPay] storage.local could not be limited to K's own pages:", error?.message || error);
   if (typeof ext.storage.local.setAccessLevel !== "function") { failed(new Error("setAccessLevel is not available in this browser")); return; }
   try {
     const result = ext.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });

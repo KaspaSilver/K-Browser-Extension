@@ -206,7 +206,7 @@ export function showRequestPayment(opts = {}) {
         ${stepNoteHtml(memoNote())}
         <p class="error-text small center-text" id="req-error" ${state.error ? "" : "hidden"}>${esc(state.error)}</p>
         ${navigator.share ? `<button type="button" class="req-share" id="req-share">${ICONS.share}<span>Share</span></button>` : ""}
-        <p class="muted tiny center-text">Anyone who opens it in KaPay or KaChat gets Send Kaspa with this filled in, and sees it was made by your chatting address (signed with its key).</p>`,
+        <p class="muted tiny center-text">Anyone who opens it in K gets Send Kaspa with this filled in, and sees it was made by your chatting address (signed with its key).</p>`,
       onBack: () => flow.go("amount"),
       onCancel: onClose,
       continueTitle: () => (state.copied && !state.working ? "Copied" : "Copy Payment Request"),
@@ -321,7 +321,7 @@ export function showRequestPayment(opts = {}) {
           <div class="req-qr-amount">${esc(`${trimmedKas(request.amountSompi ?? amountSompi() ?? 0n)} ${KAS_UNIT}`)}</div>
           ${memo ? `<p class="muted center-text req-qr-memo">${esc(memo)}</p>` : ""}
           <canvas class="req-qr-code" aria-label="Payment request QR code"></canvas>
-          <p class="muted small center-text">Scan it with an iPhone's camera to pay in KaPay, with everything filled in.</p>
+          <p class="muted small center-text">Scan it with an iPhone's camera to pay in K, with everything filled in.</p>
         </div>`,
     });
     import("qrcode")

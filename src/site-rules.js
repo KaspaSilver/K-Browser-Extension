@@ -3,7 +3,7 @@
 
 // --- answers to the site ----------------------------------------------------------------------
 
-export const rejected = () => ({ error: { code: 4001, message: "The request was rejected in KaPay." } });
+export const rejected = () => ({ error: { code: 4001, message: "The request was rejected in K." } });
 // The approval window went away while it was sending an approved payment, or the network never
 // confirmed it: it may have reached the network, so this is never "rejected" (audit EXT-012) - the
 // site must check before asking again. `txid`, when known, lets it look the payment up.

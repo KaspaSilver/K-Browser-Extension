@@ -72,8 +72,8 @@ export function scanQr({ title = "Scan QR Code", hint = "Point camera at a QR co
         <div class="scanner-denied">
           <div class="strong">Camera Access Required</div>
           <p class="muted small">${inPopup
-            ? "The toolbar window can't ask for the camera. Open KaPay in a tab once and allow the camera there - after that, scanning works here too."
-            : "Allow the camera for KaPay in your browser's site settings, then try again."}</p>
+            ? "The toolbar window can't ask for the camera. Open K in a tab once and allow the camera there - after that, scanning works here too."
+            : "Allow the camera for K in your browser's site settings, then try again."}</p>
           ${inPopup ? '<button id="camera-tab">Allow Camera in a Tab</button>' : ""}
         </div>`;
       const button = overlay.querySelector("#camera-tab");
@@ -134,14 +134,14 @@ export function scanQr({ title = "Scan QR Code", hint = "Point camera at a QR co
 export async function showCameraPermissionPage(app) {
   app.innerHTML = `
     <section class="screen center camera-permission">
-      <h2 class="center-text">Camera for KaPay</h2>
+      <h2 class="center-text">Camera for K</h2>
       <p class="muted center-text" id="camera-status">Allow the camera when your browser asks.</p>
     </section>`;
   const status = app.querySelector("#camera-status");
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
     for (const track of stream.getTracks()) track.stop();
-    status.textContent = "Camera allowed. Close this tab and scan again in KaPay.";
+    status.textContent = "Camera allowed. Close this tab and scan again in K.";
   } catch {
     status.textContent = "The camera wasn't allowed. Allow it for this extension in your browser's site settings, then reload this tab.";
   }

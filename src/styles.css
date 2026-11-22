@@ -12,7 +12,7 @@
   --on-accent: #ffffff;
   --kaspa-dim: rgba(112, 199, 186, .18);
   /* OnboardingView.pageBackground / rowBackground - the brand's near-black with a green cast. */
-  --onboard-bg: #0e1614;
+  --onboard-bg: #070d0e;
   --onboard-row: #1a2624;
   --danger: #ff6b6b;
   --radius: 14px;
@@ -180,9 +180,11 @@ html:has(body.onboarding), body.onboarding, body.onboarding #app { background: v
 
 .onboard { display: flex; flex-direction: column; flex: 1; padding: 0 28px 32px; }
 .onboard .hero { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; }
-.wordmark { display: flex; align-items: center; gap: 10px; }
-.wordmark h1 { font-size: 34px; font-weight: 800; letter-spacing: -.5px; }
-.wordmark img { width: 40px; height: 40px; border-radius: 9px; }
+/* The K globe on the sign-in screen (K iOS 58cfbf6f): the icon's teal glow around it, and a soft
+   glow behind it on the page. */
+.k-logo { width: 132px; height: 132px; filter: drop-shadow(0 0 28px rgba(107, 237, 204, .45)); }
+.k-logo.compact { width: 76px; height: 76px; filter: drop-shadow(0 0 16px rgba(107, 237, 204, .45)); }
+body.onboarding .onboard { background: radial-gradient(circle at 50% 28%, rgba(107, 237, 204, .16), transparent 60%); }
 .tagline { color: var(--muted); font-size: 15px; }
 .onboard .buttons { display: flex; flex-direction: column; gap: 14px; }
 .onboard .buttons button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 16px; font-size: 16px; border-radius: 12px; }

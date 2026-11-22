@@ -299,7 +299,7 @@ function renderWhy(frame) {
       ${headingHtml("Protect your funds")}
       ${pointHtml(ICON.key, "Your 12 or 24 words are your account", "These secret words are created just for you. They are the master key to your funds.")}
       ${pointHtml(ICON.noDevice, "Your device can't be your only copy", "If you lose, break or replace this device, these words are the only way back to your account.")}
-      ${pointHtml(ICON.noPerson, "Nobody can reset them", "There is no password reset. KaPay never sees your words, so we can't recover them for you.")}
+      ${pointHtml(ICON.noPerson, "Nobody can reset them", "There is no password reset. K never sees your words, so we can't recover them for you.")}
       <button class="ghost with-icon backup-link" id="explain">${ICON.question}<span>What are my 12 or 24 words?</span></button>`,
     foot: '<button id="next" class="big">Start Backup</button>',
   });
@@ -315,7 +315,7 @@ function renderExplainer(frame) {
     body: `
       <div class="backup-explainer">
         ${section("The short version", "Your 12 or 24 words are ordinary words that work as the master key to your account. Your wallet, its addresses and your .kachat names all come from them.")}
-        ${section("Anyone with it can take everything", "Anyone who has these words can take everything in your account. If you lose them and lose this device, nobody can get your account back, not even KaPay.")}
+        ${section("Anyone with it can take everything", "Anyone who has these words can take everything in your account. If you lose them and lose this device, nobody can get your account back, not even K.")}
         ${section("How to keep it safe", "Write the words on paper, in order, and keep them somewhere safe and private. Never type them into a website, send them in a chat, or keep them in a screenshot or cloud notes.")}
       </div>`,
   });
@@ -443,7 +443,7 @@ function renderTips(frame) {
       ${headingHtml("Keep it safe", "Your copy is right. Now keep it that way.")}
       ${pointHtml(ICON.paper, "Keep it on paper", "Store it somewhere safe and private, away from fire and water.")}
       ${pointHtml(ICON.noCloud, "Never keep it online", "No photos, screenshots, cloud storage, notes apps, email or chats.")}
-      ${pointHtml(ICON.hand, "Never share it", "Nobody needs your words. KaPay and real support will never ask for them. Anyone who asks is trying to take your funds.")}
+      ${pointHtml(ICON.hand, "Never share it", "Nobody needs your words. K and real support will never ask for them. Anyone who asks is trying to take your funds.")}
       ${hasPassphrase() ? pointHtml(ICON.split, "Keep your passphrase apart", "Store it away from your 12 or 24 words. You need both, and losing either one loses the account.") : ""}
       ${pointHtml(ICON.gear, "You can see it again", "Your 12 or 24 words stay available in Settings > Back Up Account.")}`,
     foot: '<button id="next" class="big">Finish Backup</button>',

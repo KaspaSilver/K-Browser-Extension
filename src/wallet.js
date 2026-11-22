@@ -145,7 +145,7 @@ export const SEND_ABORTED = "SEND_ABORTED";
 let spendAuthorizer = null;
 export function setSpendAuthorizer(fn) { spendAuthorizer = typeof fn === "function" ? fn : null; }
 async function confirmSpend(details) {
-  if (!spendAuthorizer) throw new Error("Open KaPay to confirm this send with your password.");
+  if (!spendAuthorizer) throw new Error("Open K to confirm this send with your password.");
   if (await spendAuthorizer(details)) return;
   const error = new Error("Nothing was sent.");
   error.code = SEND_CANCELLED;
@@ -739,7 +739,7 @@ export function otherNetworkReason(address) {
   if (!isValidKaspaAddress(clean)) return null;
   const network = networkOfAddress(clean);
   if (!network || network === ACTIVE_NETWORK) return null;
-  return network === "testnet" ? "This is a Testnet address. KaPay is on Mainnet." : "This is a Mainnet address. KaPay is on Testnet.";
+  return network === "testnet" ? "This is a Testnet address. K is on Mainnet." : "This is a Mainnet address. K is on Testnet.";
 }
 
 /**
@@ -1512,7 +1512,7 @@ export async function reserveSwapPayoutAddress(shownAddress = null) {
   const index = state.maxIndex + 1;
   const address = (await spendingAddressRange(index, 1, account))[index];
   if (shownAddress && shownAddress !== address) {
-    const error = new Error("The receiving address changed in another KaPay window. Check the new one and try again.");
+    const error = new Error("The receiving address changed in another K window. Check the new one and try again.");
     error.code = PAYOUT_CHANGED;
     error.next = { index, address };
     throw error;

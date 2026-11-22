@@ -1,2 +1,2 @@
-# KaPay Extension (browser extension)
-This is the source code for the KaPay Extension, the Kaspa wallet from KaChat for your browser (formerly KaChat Wallet). For more details please visit https://home.kachat.app/
+# K Extension (browser extension)
+This is the source code for the K Extension, the Kaspa wallet for your browser (formerly the KaPay Extension, and before that KaChat Wallet). For more details please visit https://home.kachat.app/

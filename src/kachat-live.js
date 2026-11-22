@@ -419,8 +419,8 @@ export function confirmAlert({ title, message, confirmLabel, cancelLabel = "Canc
 /** What the receipt says under its title for each stage (iOS KachatTxDoneSheet.stageText). */
 function txStageText(stage) {
   switch (stage) {
-    case TxStage.accepted: return "It's in a block. Updating KaPay...";
-    case TxStage.shown: return "Done. It shows in KaPay now.";
+    case TxStage.accepted: return "It's in a block. Updating K...";
+    case TxStage.shown: return "Done. It shows in K now.";
     case TxStage.dropped: return "The network hasn't taken it. Nothing was spent if it never lands - try again with a faster fee.";
     default: return "Waiting for the network to put it in a block. Usually a few seconds; longer when it's busy.";
   }
@@ -465,7 +465,7 @@ export function showTxDone({ txId, title = "Transaction sent", onClose = () => {
         <div class="kl-receipt-steps">
           ${txStepHtml("Sent to the network", { done: true })}
           ${txStepHtml("In a block", { done: inBlock, active: !inBlock && st !== TxStage.dropped })}
-          ${txStepHtml("Updated in KaPay", { done: st === TxStage.shown, active: st === TxStage.accepted })}
+          ${txStepHtml("Updated in K", { done: st === TxStage.shown, active: st === TxStage.accepted })}
         </div>
         <button class="kl-txid" id="kl-copy-tx" title="Copy">
           <span class="mono tiny ellipsis">${esc(txId)}</span><span class="kl-copy-icon">${ICONS.copy || ""}</span>
@@ -720,7 +720,7 @@ function registrationCardHtml(r) {
     if (r.stage === Stage.waiting) {
       stage = r.commitDaa == null
         ? "Waiting for the commit to confirm..."
-        : "The commit has to age for about a minute before the name can be registered. Keep KaPay open - it registers by itself, and picks up where it left off if you leave.";
+        : "The commit has to age for about a minute before the name can be registered. Keep K open - it registers by itself, and picks up where it left off if you leave.";
     }
     let progress = "";
     const virtualDaa = runtimeActions()?.virtualDaa ?? hub.virtualDaa;
@@ -796,7 +796,7 @@ function notifyFinished(pending) {
 const progressSheet = { el: null, id: null };
 const claimsList = { handle: null };
 let watchedActions = null;
-const KEEP_OPEN_NOTE = "Keep KaPay open: the name is registered about a minute after the hidden commit confirms. If you close it, it picks up where it left off next time.";
+const KEEP_OPEN_NOTE = "Keep K open: the name is registered about a minute after the hidden commit confirms. If you close it, it picks up where it left off next time.";
 
 /** Follows this wallet's claims for as long as the wallet is open (popup.js starts it once
  *  connected, the hub when it opens): the progress sheet, the claims list, the claims button's
@@ -1323,7 +1323,7 @@ function txStageStepsHtml(stage) {
     <div class="kl-receipt-steps">
       ${txStepHtml("Sent to the network", { done: true })}
       ${txStepHtml("In a block", { done: inBlock, active: !inBlock && stage !== TxStage.dropped })}
-      ${txStepHtml("Updated in KaPay", { done: stage === TxStage.shown, active: stage === TxStage.accepted })}
+      ${txStepHtml("Updated in K", { done: stage === TxStage.shown, active: stage === TxStage.accepted })}
     </div>
     ${stage === TxStage.dropped ? `<p class="muted small center-text kl-stage-text">${esc(txStageText(stage))}</p>` : ""}`;
 }
@@ -1356,7 +1356,7 @@ const labeledRow = (title, value, bold = false) =>
 /** When the wallet's KAS is in more small coins than a name transaction can take, the swipe first
  *  sends a self-send combining them (the engine's `combinesCoins`): said on the review, as on iOS
  *  and Desktop (EXT-022). */
-function combineNoteHtml(text = "Your KAS is in many small coins. When you tap, KaPay first combines them into one (a separate transaction with its own small fee), then sends this.") {
+function combineNoteHtml(text = "Your KAS is in many small coins. When you tap, K first combines them into one (a separate transaction with its own small fee), then sends this.") {
   return `<div class="kl-busy-notice kl-combine-note" role="note">
     <span class="accent">${SYMBOLS.arrows}</span>
     <span class="kl-busy-copy"><span class="muted tiny">${esc(text)}</span></span>
@@ -1815,7 +1815,7 @@ function openClaimSheet(target) {
         <div class="muted tiny">Claiming sends two transactions: the commit now, the registration about a minute later. Both pay this fee rate.</div>
       </div>
       ${q ? `<div class="sk-pills"><span class="sk-pill">Available: ${esc(amount(q.spendable))}</span></div>` : ""}
-      ${q?.combinesCoins && q.affordable ? combineNoteHtml("Your KAS is in many small coins. KaPay combines them into one before registering, for a tiny extra network fee.") : ""}
+      ${q?.combinesCoins && q.affordable ? combineNoteHtml("Your KAS is in many small coins. K combines them into one before registering, for a tiny extra network fee.") : ""}
       ${q && !q.affordable ? `<p class="error-text small kl-review-note">${esc("Not enough KAS on your chatting address for this name.")}</p>` : ""}
       ${state.startError ? `<p class="error-text small kl-review-note">${esc(state.startError)}</p>` : ""}`;
   };

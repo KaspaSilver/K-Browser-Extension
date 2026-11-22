@@ -19,12 +19,12 @@
     try {
       reply = api.runtime.sendMessage({ type: "dapp-request", method: data.method, params });
     } catch {
-      toPage({ id: data.id, error: { code: 4900, message: "KaPay was updated - reload this page." } });
+      toPage({ id: data.id, error: { code: 4900, message: "K was updated - reload this page." } });
       return;
     }
     Promise.resolve(reply)
-      .then((response) => toPage({ id: data.id, ...(response || { error: { code: 4900, message: "KaPay did not answer." } }) }))
-      .catch(() => toPage({ id: data.id, error: { code: 4900, message: "KaPay is unavailable. Reload this page." } }));
+      .then((response) => toPage({ id: data.id, ...(response || { error: { code: 4900, message: "K did not answer." } }) }))
+      .catch(() => toPage({ id: data.id, error: { code: 4900, message: "K is unavailable. Reload this page." } }));
   });
 
   // Connecting, disconnecting, switching account or network: the background worker tells this
