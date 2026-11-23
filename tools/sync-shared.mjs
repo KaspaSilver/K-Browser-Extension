@@ -4,14 +4,14 @@
 // this repo carries copies so it builds on its own. Run it when the desktop engine changes,
 // then build, test and commit shared/ with the commit it came from in the message.
 //
-//   npm run sync-shared [-- /path/to/KaChat-Desktop]     (default: ../KaChat-Desktop)
+//   npm run sync-shared [-- /path/to/K-Desktop]     (default: ../K-Desktop, KaChat-Desktop's folder since 2026-11-23)
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const desktop = resolve(process.argv[2] || `${root}../KaChat-Desktop`);
+const desktop = resolve(process.argv[2] || `${root}../K-Desktop`);
 if (!existsSync(`${desktop}/engine/wallet.js`)) {
   console.error(`No KaChat-Desktop checkout at ${desktop} - pass its path.`);
   process.exit(1);

@@ -10,6 +10,11 @@
 //                  Connection Settings > Domains): its own field, apart from the message indexer, so
 //                  anyone can run the names indexer themselves
 //   knsApi       — KNS domain/profile API
+//   trestlyApi   — Trestly's kUSDT API (iOS AppSettings.trestlyAPIURL, KaPay 3d126db): which kUSDT
+//                  coins an address has. Asked DIRECTLY, never through the /nc-proxy relay (a capped
+//                  Cloudflare function; api.trestly.io sends CORS *), so it is deliberately absent
+//                  from INDEXER_PROXY_HOST_RE below. Defaults to engine/kusdt.js KUSDT_DEPLOYMENTS
+//                  apiBase (tools/test-kusdt-ui.mjs holds the two equal).
 //   trustedNode  — wRPC node endpoint ("" = auto-discover via the resolver)
 import { IS_TESTNET } from "./network.js";
 import { indexerKey, watchIndexerFetch } from "./indexer-health.js";
@@ -34,6 +39,7 @@ const MAINNET_ENDPOINT_DEFAULTS = Object.freeze({
   pushIndexer: DEFAULT_MAINNET_INDEXER,
   kachatNamesIndexer: DEFAULT_MAINNET_INDEXER,
   knsApi: "https://api.knsdomains.org/mainnet/api/v1",
+  trestlyApi: "https://api.trestly.io/api/v1",
   translationService: DEFAULT_MAINNET_INDEXER,
   trustedNode: "",
   // Retired: the hosted mode is always the public-node scan with KaChat's node as fallback. The
@@ -54,14 +60,14 @@ const TESTNET_ENDPOINT_DEFAULTS = Object.freeze({
   pushIndexer: DEFAULT_TESTNET_INDEXER,
   kachatNamesIndexer: DEFAULT_TESTNET_INDEXER,
   knsApi: "https://api.knsdomains.org/tn10/api/v1",
-  // Translating text has nothing to do with the chain: testnet uses the same service (iOS 2ca41aa).
+  trestlyApi: "https://testnet.trestly.io/api/v1",
+  // Not read: translation follows the message indexer, so it's off on testnet (KaChat iOS 148a5331,
+  // getEndpoint's FOLLOWS_MESSAGE_INDEXER). Kept so an older stored value isn't an unknown key.
   translationService: DEFAULT_MAINNET_INDEXER,
   trustedNode: "",
   nodeScan: "",
 });
 export const ENDPOINT_DEFAULTS = IS_TESTNET ? TESTNET_ENDPOINT_DEFAULTS : MAINNET_ENDPOINT_DEFAULTS;
-/** The mainnet defaults, for hints and comparisons. */
-export const MAINNET_DEFAULTS = MAINNET_ENDPOINT_DEFAULTS;
 // The node "Default (Recommended)" connects to. iOS talks gRPC to toccata.kaspium.io; a browser
 // can only open wRPC over WebSocket.
 // The hosted "Better" choice: Kasia's public mainnet node, the one the Kasia web app connects to
@@ -387,7 +393,6 @@ export function setVerboseApiLogging(enabled, sink = null) {
   verboseApiLogging = Boolean(enabled);
   if (sink) apiLogSink = sink;
 }
-export function isVerboseApiLogging() { return verboseApiLogging; }
 function traceApiCall(rawUrl, init, run) {
   if (!verboseApiLogging || !apiLogSink || !rawUrl) return run();
   let host = "";
@@ -411,7 +416,14 @@ function persist() {
 
 // Returns the effective endpoint for a key (override if set and non-empty, else
 // the default). Trailing slashes are trimmed so callers can append paths safely.
+// KaPost, Public Chats and post translation run on KaChat's own indexer, so they follow the
+// message indexer (KaChat iOS 148a5331 AppSettings.kaPostIndexerURL / publicChatIndexerURL /
+// translationServiceURL = indexerURL): on testnet, where it's blank, they are off. Settings has no
+// field of their own any more, and a value saved for one of them earlier is not read.
+const FOLLOWS_MESSAGE_INDEXER = new Set(["kapostIndexer", "broadcastIndexer", "translationService"]);
+
 export function getEndpoint(key) {
+  if (FOLLOWS_MESSAGE_INDEXER.has(key)) return getEndpoint("kasiaIndexer");
   const value = overrides[key];
   const resolved = (value != null && String(value).trim()) ? String(value).trim() : (ENDPOINT_DEFAULTS[key] || "");
   return resolved.replace(/\/+$/, "");
@@ -430,7 +442,7 @@ export function getEndpointOverride(key) {
 }
 
 export function setEndpoint(key, value) {
-  if (!(key in ENDPOINT_DEFAULTS)) return;
+  if (!(key in ENDPOINT_DEFAULTS) || FOLLOWS_MESSAGE_INDEXER.has(key)) return;
   const clean = String(value ?? "").trim();
   if (!clean || clean === ENDPOINT_DEFAULTS[key]) delete overrides[key];
   else overrides[key] = clean;

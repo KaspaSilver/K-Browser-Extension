@@ -28,7 +28,7 @@ import { ext, tellBackground } from "./browser.js";
 import {
   app, esc, render, $, toast, copyText, copySecret, settings, saveSettings, ICONS, navHeader, passwordGate,
 } from "./ui.js";
-import { ENDPOINT_DEFAULTS, MAINNET_DEFAULTS, getEndpoint, getEndpointOverride, setEndpoint } from "../shared/engine/endpoints.js";
+import { ENDPOINT_DEFAULTS, DEFAULT_MAINNET_INDEXER, getEndpoint, getEndpointOverride, setEndpoint } from "../shared/engine/endpoints.js";
 import { tabTopHtml, bindTabTop } from "./dock.js";
 import { kachatRegistry } from "./kachat-names.js";
 import { KachatNamesService } from "../shared/engine/kachat-names/service.js";
@@ -636,7 +636,7 @@ async function showConnectionSection({ onBack }) {
       <div class="form-header">.kachat Names</div>
       <div class="form-card">
         <div class="form-row stack-tight"><span class="muted small">.kachat Indexer URL</span>
-          <input id="kachat-indexer" class="plain-input mono" value="${esc(draft.kachatIndexer)}" placeholder="${esc(indexerDefault || MAINNET_DEFAULTS.kachatNamesIndexer)}" autocomplete="off" spellcheck="false" />
+          <input id="kachat-indexer" class="plain-input mono" value="${esc(draft.kachatIndexer)}" placeholder="${esc(indexerDefault || DEFAULT_MAINNET_INDEXER)}" autocomplete="off" spellcheck="false" />
           <span class="error-text small" id="kachat-indexer-error">${/^http:\/\//i.test(draft.kachatIndexer.trim()) ? HTTPS_REQUIRED : ""}</span>
         </div>
         <div class="form-row between"><span>Reading names from</span><span id="kachat-source">${kachatSourceHtml()}</span></div>
@@ -754,7 +754,7 @@ async function showConnectionSection({ onBack }) {
       // anything else is awaited - one request for both.
       const origins = [];
       if (parsed.value !== defaultRest && parsed.value !== ENDPOINT_DEFAULTS.kaspaApi) origins.push(`${new URL(parsed.value).origin}/*`);
-      if (indexerParsed.value && indexerParsed.value !== MAINNET_DEFAULTS.kachatNamesIndexer) origins.push(`${new URL(indexerParsed.value).origin}/*`);
+      if (indexerParsed.value && indexerParsed.value !== DEFAULT_MAINNET_INDEXER) origins.push(`${new URL(indexerParsed.value).origin}/*`);
       if (origins.length && ext?.permissions?.request) {
         let granted = false;
         try { granted = await ext.permissions.request({ origins }); } catch { granted = false; }
