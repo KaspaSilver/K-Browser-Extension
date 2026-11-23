@@ -44,6 +44,8 @@ import { NETWORK, NETWORK_MIRROR_KEY, IS_TESTNET, syncNetworkMirror } from "./ne
 import { showColdStorage, coldWatchAddresses } from "./cold.js";
 import { showPortfolio } from "./portfolio.js";
 import { showCameraPermissionPage } from "./camera.js";
+import { startKusdt, kusdtCardHtml, watchKusdtCard, openWalletSend, openSwapStablecoins, openManageKusdt } from "./kusdt-screens.js";
+import { kusdt } from "./kusdt.js";
 import { logWarn } from "./log.js";
 
 const params = new URLSearchParams(location.search);
@@ -72,7 +74,7 @@ async function boot() {
 
 // The Wallet tab's screens keep the dock; sheets and full-screen flows (send, keys, QR) don't.
 dock.showsDock("home", "manage-chat", "manage-list", "manage-spending", "domains", "domain-detail",
-  "licenses", "kachat-name", "identity-picker", "identity-detail");
+  "licenses", "kachat-name", "identity-picker", "identity-detail", "kusdt-manage", "kusdt-address");
 dock.registerTab("profile", () => showHome());
 dock.registerTab("cold", () => showColdStorage());
 dock.registerTab("portfolio", () => showPortfolio());
@@ -229,6 +231,45 @@ async function showHome() {
   paintHome();
   refreshHome();
   followOwedConnections().catch(() => {});
+  // kUSDT for this account: its addresses, then a look at its balances (K-Desktop initKusdt)
+  startKusdt().then(() => {
+    if (epoch !== accountEpoch) return;
+    kusdt().refreshIfStale().catch(() => {});
+    paintKusdtCard();
+  });
+}
+
+// The Wallet's card pager (KaPay iOS 3d126db SlidingCardPager): 0 Kaspa, 1 kUSDT. Kept while the
+// popup is open, so coming back to the tab shows the card you left.
+let walletCardPage = 0;
+/** Repaints the kUSDT card in place while the Wallet tab shows. */
+function paintKusdtCard() {
+  const card = document.querySelector("#kusdt-card");
+  if (!card || app.dataset.screen !== "home") return;
+  card.outerHTML = kusdtCardHtml();
+  const fresh = document.querySelector("#kusdt-card");
+  if (fresh) fresh.onclick = openKusdtManage;
+}
+watchKusdtCard(paintKusdtCard);
+function openKusdtManage() { openManageKusdt({ onBack: showHome }); }
+function setWalletCardPage(page, animate = true) {
+  walletCardPage = page ? 1 : 0;
+  const track = document.querySelector(".wallet-card-track");
+  if (track) {
+    track.classList.toggle("no-anim", !animate);
+    track.style.transform = `translateX(${-walletCardPage * 100}%)`;
+  }
+  for (const pill of document.querySelectorAll("[data-card-pill]")) {
+    const on = Number(pill.dataset.cardPill) === walletCardPage;
+    pill.classList.toggle("on", on);
+    pill.setAttribute("aria-selected", String(on));
+  }
+  for (const card of document.querySelectorAll("[data-card-page]")) {
+    const on = Number(card.dataset.cardPage) === walletCardPage;
+    card.setAttribute("aria-hidden", String(!on));
+    card.inert = !on;
+  }
+  if (walletCardPage === 1) kusdt().refreshIfStale().catch(() => {});
 }
 
 // --- Expired .kachat names (iOS 6ac48a7): a dismissible banner while any is in its grace period ---
@@ -302,8 +343,11 @@ function paintHome() {
       <div class="profile-title"><h1>Wallet</h1></div>
       <section class="profile-body">
         ${graceBannerHtml(s)}
+        <!-- The balance cards side by side, one showing, the pills under them choosing (KaPay iOS
+             3d126db SlidingCardPager): Kaspa, then kUSDT. Each opens its Manage screen. -->
+        <div class="wallet-card-pager"><div class="wallet-card-track">
         <!-- a click opens Manage Addresses; the toolbar balance still copies (KaPay iOS 3d126db) -->
-        <button class="wallet-balance-card" id="total-balance" aria-label="Manage Addresses">
+        <button class="wallet-balance-card" id="total-balance" data-card-page="0" aria-label="Manage Addresses">
           <div class="wallet-balance-head">
             <span class="wallet-balance-top"><span class="muted">Total Balance</span><span class="wallet-manage-hint">Tap to Manage ›</span></span>
             <span class="wallet-balance-total">${totalSompi != null ? `${esc(wallet.formatKas(totalSompi, 8))} KAS` : "--"}</span>
@@ -314,6 +358,12 @@ function paintHome() {
             <div><span class="muted tiny">Spending</span><span class="strong small mono-digits">${spendingSompi != null ? `${esc(wallet.formatKas(spendingSompi, 8))} KAS` : "--"}</span></div>
           </div>
         </button>
+        <div data-card-page="1">${kusdtCardHtml()}</div>
+        </div></div>
+        <div class="wallet-card-pills" role="tablist" aria-label="Balance cards">
+          <button type="button" class="wallet-card-pill" role="tab" data-card-pill="0">Kaspa</button>
+          <button type="button" class="wallet-card-pill" role="tab" data-card-pill="1">kUSDT</button>
+        </div>
         ${s.scanning ? '<p class="muted small center-text wallet-scanning"><span class="spinner small-spin"></span> Scanning your addresses for balances…</p>' : ""}
         <div class="wallet-actions">
           ${actionButton("send", "Send", ACTION.send)}
@@ -355,11 +405,29 @@ function paintHome() {
   // "Preparing a fresh address" while it is worked out, then the white QR page with the
   // address's balance in the bar. Each comes back to the Wallet tab.
   const back = () => dock.returnToTab();
-  $("#send").onclick = () => { if (main) showSend({ source: { kind: "main" }, fromAddress: main, navTitle: "Send Kaspa", onClose: back }); };
+  // Send: Kaspa or kUSDT (K-Desktop openWalletSend, KaPay iOS 3d126db SendAssetChooser)
+  const sendKaspa = () => { if (main) showSend({ source: { kind: "main" }, fromAddress: main, navTitle: "Send Kaspa", onClose: back }); };
+  $("#send").onclick = () => { if (main) openWalletSend({ kaspaTotalSompi: totalSompi, onKaspa: sendKaspa, onBack: back }); };
   $("#receive").onclick = () => openReceive(back);
   $("#request").onclick = () => showRequestPayment();
-  // ChangeNOW Swap (KaChat-Desktop Build 217)
-  $("#swap").onclick = () => import("./swaps.js").then((m) => m.showSwap());
+  // Swap Stablecoins (K iOS, K-Desktop): kUSDT on Trestly's site; ChangeNOW Swap (KaChat-Desktop
+  // Build 217) for other coins stays under it
+  $("#swap").onclick = () => openSwapStablecoins({ onOtherCoins: () => import("./swaps.js").then((m) => m.showSwap()) });
+  $("#kusdt-card").onclick = openKusdtManage;
+  for (const pill of document.querySelectorAll("[data-card-pill]")) pill.onclick = () => setWalletCardPage(Number(pill.dataset.cardPill));
+  // a finger drags the cards (iOS SlidingCardPager); a mouse uses the pills
+  const pager = document.querySelector(".wallet-card-pager");
+  let touchStart = null;
+  pager.addEventListener("pointerdown", (event) => { if (event.pointerType !== "mouse") touchStart = { x: event.clientX, y: event.clientY }; });
+  pager.addEventListener("pointerup", (event) => {
+    if (!touchStart) return;
+    const dx = event.clientX - touchStart.x;
+    const dy = event.clientY - touchStart.y;
+    touchStart = null;
+    if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy)) setWalletCardPage(walletCardPage + (dx < 0 ? 1 : -1));
+  });
+  pager.addEventListener("pointercancel", () => { touchStart = null; });
+  setWalletCardPage(walletCardPage, false);
   if (main) $("#chatting-qr").onclick = () => openChattingQr(s, paintHome);
   $("#total-balance").onclick = () => showManageAddresses({
     onBack: showHome,
@@ -507,6 +575,8 @@ function openBell() {
     openWallet: (address) => {
       const s = homeState;
       const main = s?.addresses?.main;
+      // "Received X kUSDT" opens Manage kUSDT (K-Desktop)
+      if (address === "kusdt") { openKusdtManage(); return; }
       if (!address) { dock.selectTab("portfolio"); return; }
       if (main && address === main.toLowerCase()) {
         showManageAddress({ address: main, onBack: showHome, onChangeIdentity: s.account.imported ? () => { homeState = null; showHome(); } : null });

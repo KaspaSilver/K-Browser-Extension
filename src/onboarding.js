@@ -26,6 +26,7 @@ import { nextDefaultAccountName } from "../shared/ui/account-backup-status.js";
 import { forgetWallet as forgetAddressBook } from "./address-book.js";
 import { forgetAccount as forgetBell } from "./bell.js";
 import { forgetKachatSigner } from "./kachat-names.js";
+import { forgetAccount as forgetKusdtStorage } from "../shared/engine/kusdt-store.js";
 import { reencodeAddress } from "./net.js";
 import { accountDataKeys, withoutAccount } from "./account-scope.js";
 import { DEFAULT_IMPORT_CHOICE, candidateId, sameChoice, visibleImportRows, walletTypeName, importFundsHint } from "./import-search.js";
@@ -275,6 +276,8 @@ export async function deleteAccount(accountId, mainAddress) {
       await forgetAddressBook(chatting);
       forgetBell(chatting);
       backupStatus.forget(chatting);
+      // its kUSDT records: balances seen, history, the lists (K-Desktop clears them on delete)
+      try { forgetKusdtStorage(localStorage, chatting); } catch { /* nothing kept */ }
     }
   }
   await removeConnectionsFor(accountId);

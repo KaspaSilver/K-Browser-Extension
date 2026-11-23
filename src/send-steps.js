@@ -49,11 +49,11 @@
 //       network never confirmed (SEND_OUTCOME_UNKNOWN's message) is "Not confirmed" with only
 //       Done, since Try Again could pay twice (KaPay 953b255). Enter / Space on the bar sends
 //       too. Returns { body, setBody(html), setEnabled(on), setBusy(on), setSent({ txid,
-//       amountSompi, recipient, explorerUrl }, outcomeHtml), setSucceeded(html), returnToForm(), sending }.
+//       amountSompi | amountText, recipient, explorerUrl }, outcomeHtml), setSucceeded(html), returnToForm(), sending }.
 //       The screen calls setBusy(true) once its send started (else it fails after a moment),
 //       then setSent(...) when it went out, or setBusy(false) alone for a failure shown with
 //       getFailureMessage(). returnToForm() drops back to the review with nothing shown (the
-//       password prompt was cancelled). getPreview() -> { amountSompi, recipient }.
+//       password prompt was cancelled). getPreview() -> { amountSompi | amountText, recipient }.
 //   SWIPE_UP_LABELS: send / buy / claim / consolidate wording.
 
 import * as wallet from "./wallet.js";
@@ -637,9 +637,12 @@ export function showSwipeUp({
     els.mark.innerHTML = done ? ICON.markDone : unknown ? ICON.markUnknown : (failure ? ICON.markFailed : "");
     els.mark.className = `sk-swipe-mark${ending.kind ? ` ${ending.kind}` : ""}`;
     els.big.textContent = ending.title ?? (sending || tapping ? labels.working : (armed ? labels.release : "Keep Swiping"));
+    // `amountText`: an amount already written out in its own unit (Send kUSDT's "25.00 kUSDT")
+    const amountText = sent?.amountText ?? preview.amountText ?? null;
     const amount = sent?.amountSompi ?? preview.amountSompi;
-    els.amount.hidden = amount == null;
-    if (amount != null) els.amount.textContent = unitText(`${trimmedKas(amount)} ${KAS_UNIT}`);
+    els.amount.hidden = amountText == null && amount == null;
+    if (amountText != null) els.amount.textContent = unitText(amountText);
+    else if (amount != null) els.amount.textContent = unitText(`${trimmedKas(amount)} ${KAS_UNIT}`);
     const to = String(sent?.recipient ?? preview.recipient ?? "").trim();
     els.to.hidden = !to;
     if (to) { els.to.title = to; els.to.innerHTML = `<span class="sk-sent-to-word">${esc(labels.recipientWord)}&nbsp;</span>${middleTruncatedHtml(to, 8)}`; }

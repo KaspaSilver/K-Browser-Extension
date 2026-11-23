@@ -71,7 +71,9 @@
     "https://*.kaspa.stream/*",
     "https://*.kaspa.blue/*",
     "https://*.kaspa.ws/*",
-    "https://indexer.kachat.app/*"
+    "https://indexer.kachat.app/*",
+    "https://api.trestly.io/*",
+    "https://testnet.trestly.io/*"
   ],
   "optional_host_permissions": [
     "https://*/*"

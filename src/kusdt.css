@@ -1,0 +1,83 @@
+/* kUSDT (K-Desktop ui/kusdt-*.js, KaPay iOS 3d126db): the coin, the Wallet card pager, the send
+   and combine reviews, Manage kUSDT, the receive pills and the guide. */
+
+:root { --usdt-green: #26a17b; }
+
+/* The coin (iOS TokenIcon): the USDT mark on USDT green, the Kaspa logo at the corner. */
+.kusdt-coin, .kusdt-kaspa-coin { position: relative; display: inline-flex; flex: none; width: var(--kusdt-coin, 40px); height: var(--kusdt-coin, 40px); }
+.kusdt-coin > svg { width: 100%; height: 100%; }
+.kusdt-coin-kaspa { position: absolute; right: -2px; bottom: -2px; width: 38%; height: 38%; border-radius: 50%; background: #000; }
+.kusdt-kaspa-coin img { width: 100%; height: 100%; border-radius: 50%; }
+
+/* Its stroke icons (SF Symbols), drawn like the app's others. */
+.kusdt-ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.sheet-icon .kusdt-ic { width: 20px; height: 20px; }
+.fab .kusdt-ic { width: 22px; height: 22px; stroke-width: 2.2; }
+.kusdt-note-icon .kusdt-ic { width: 16px; height: 16px; stroke-width: 2.2; }
+
+/* The Wallet tab: Kaspa's card and kUSDT's side by side, the pills under them choosing (iOS
+   SlidingCardPager / BalancePagePills). */
+.wallet-card-pager { overflow: hidden; border-radius: 22px; }
+.wallet-card-track { display: flex; transition: transform .35s cubic-bezier(.2, .8, .2, 1); }
+.wallet-card-track > * { flex: 0 0 100%; }
+.wallet-card-track.no-anim { transition: none; }
+.wallet-card-pills { display: flex; justify-content: center; gap: 8px; margin-top: -4px; }
+.wallet-card-pill { padding: 5px 14px; border-radius: 999px; background: transparent; color: var(--muted); border: .8px solid var(--line); font-size: 12px; font-weight: 600; }
+.wallet-card-pill.on { color: #000; background: var(--kaspa); border-color: var(--kaspa); }
+.kusdt-balance-card {
+  background: linear-gradient(135deg, rgba(38, 161, 123, .34), rgba(38, 161, 123, .08));
+  border-color: rgba(38, 161, 123, .45);
+}
+.kusdt-balance-card .wallet-manage-hint { color: var(--usdt-green); }
+.kusdt-card-title { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Lines with an icon: a status, a warning, a note. */
+.kusdt-status { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; line-height: 1.35; }
+.kusdt-status .kusdt-ic, .kusdt-status .spinner { margin-top: 1px; }
+.kusdt-status.muted { color: var(--muted); }
+.kusdt-status.bad { color: #ff453a; }
+.kusdt-status.warn { color: var(--orange); }
+
+/* Half sheets: the question under the title, the footnote. */
+.kusdt-sheet-question { font-size: 17px; font-weight: 700; margin-top: 6px; }
+.kusdt-sheet-footer { margin: 4px 16px 10px; }
+
+/* Send kUSDT */
+.kusdt-from-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; }
+.kusdt-from-row .tx-meta { flex: 1; min-width: 0; }
+.kusdt-check { display: inline-flex; }
+.kusdt-from-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 16px 8px; }
+.kusdt-review-amount { align-items: center; }
+.kusdt-review-big { display: inline-flex; align-items: center; gap: 10px; }
+.kusdt-section-label { font-size: 13px; font-weight: 600; color: var(--muted); margin: 4px 2px -4px; }
+.kusdt-fund { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.kusdt-fund .ios-capsule { justify-content: center; }
+
+/* Manage kUSDT */
+.kusdt-total { position: relative; }
+.kusdt-bridged { align-self: flex-start; margin-top: 8px; display: inline-flex; align-items: center; gap: 5px; color: var(--usdt-green); }
+.kusdt-bridged .kusdt-ic { width: 14px; height: 14px; }
+.kusdt-row-label { display: inline-flex; align-items: center; gap: 6px; }
+.kusdt-row-icon .kusdt-ic { width: 14px; height: 14px; }
+.kusdt-hidden-note { align-self: center; font-size: 13px; }
+.kusdt-empty { padding-top: 8px; }
+.kusdt-vis-fixed { cursor: default; }
+.kusdt-pending { font-size: 11px; font-weight: 700; color: var(--orange); }
+.kusdt-activity-icon .kusdt-ic { width: 26px; height: 26px; }
+.kusdt-activity-icon.accent { color: var(--kaspa); }
+
+/* About kUSDT, the guide */
+.kusdt-about { padding: 8px 18px 24px; gap: 14px; }
+.kusdt-about p { margin: 0; line-height: 1.45; font-size: 14px; }
+.kusdt-about-head { display: flex; align-items: center; gap: 12px; font-size: 17px; }
+.kusdt-about-links { display: flex; gap: 8px; flex-wrap: wrap; }
+.kusdt-about-links a { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.kusdt-guide { gap: 10px; }
+.kusdt-guide-head { display: flex; align-items: center; gap: 12px; padding: 4px 4px 8px; }
+.kusdt-guide-card { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 16px; }
+.kusdt-guide-icon { color: var(--kaspa); display: inline-flex; margin-top: 2px; }
+.kusdt-guide-icon .kusdt-ic { width: 22px; height: 22px; }
+.kusdt-guide-card[data-tone="warn"] .kusdt-guide-icon { color: var(--orange); }
+
+/* Receive kUSDT */
+.kusdt-receive-pills { justify-content: center; }

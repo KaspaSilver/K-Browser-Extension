@@ -1388,9 +1388,10 @@ async function editableState() {
 
 /** Address Visibility's Hide All (iOS 245a5d2): every spending address hidden - the list starts
  *  over with only the chatting address. */
-export async function hideAllSpending() {
+export async function hideAllSpending(keep = new Set()) {
   const { account, state } = await editableState();
-  return saveSpendingState(account.id, { hidden: revealedSpendingIndices(state) });
+  // `keep`: the addresses Manage kUSDT lists stay (K-Desktop hideAllKeepingListed, §11)
+  return saveSpendingState(account.id, { hidden: revealedSpendingIndices(state).filter((i) => !keep.has(Number(i))) });
 }
 
 export async function setSpendingHidden(index, hidden, accountId = null) {

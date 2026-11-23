@@ -71,6 +71,7 @@ const short = (a) => `${a.slice(0, 14)}...${a.slice(-6)}`;
  *                                    From step (iOS 7a8102b)
  * @param {Function} opts.onClose    cancel / done
  * @param {Function} [opts.onSent]   after a successful send, before Done
+ * @param {bigint} [opts.amountSompi] the amount filled in (kUSDT's Fund This Address: the shortfall)
  */
 export function showSend(opts) {
   const state = {
@@ -1044,6 +1045,7 @@ export function showSend(opts) {
   };
 
   // --- start -----------------------------------------------------------------------------
+  if (!opts.compound && opts.amountSompi != null && BigInt(opts.amountSompi) > 0n) setAmountKas(wallet.sompiToKasText(BigInt(opts.amountSompi)));
   if (!opts.compound && state.recipientInput) {
     if (applyRequestLink(state.recipientInput)) requestFromLink = true;
     else lookup.now();

@@ -28,6 +28,7 @@ import { ext, tellBackground } from "./browser.js";
 import {
   app, esc, render, $, toast, copyText, copySecret, settings, saveSettings, ICONS, navHeader, passwordGate,
 } from "./ui.js";
+import { kusdtCoinIconHtml } from "./kusdt-icons.js";
 import { ENDPOINT_DEFAULTS, DEFAULT_MAINNET_INDEXER, getEndpoint, getEndpointOverride, setEndpoint } from "../shared/engine/endpoints.js";
 import { tabTopHtml, bindTabTop } from "./dock.js";
 import { kachatRegistry } from "./kachat-names.js";
@@ -123,8 +124,8 @@ export async function showSettings(opts) {
 // questionmark.circle
 const HELP_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.3-2.5 3.8M12 17h.01"/></svg>';
 
-/** Settings > Help (moved here from the Wallet tab, KaPay iOS 3d126db): the guides. iOS's kUSDT
- *  Guide has no counterpart here. */
+/** Settings > Help (moved here from the Wallet tab, KaPay iOS 3d126db): the guides - .kachat names
+ *  and kUSDT (K-Desktop openKusdtGuide). */
 function showHelp({ onBack }) {
   const again = () => showHelp({ onBack });
   render(`
@@ -136,9 +137,15 @@ function showHelp({ onBack }) {
           <span class="conn-card-text"><span class="conn-card-title">.kachat Names Guide</span><span class="muted small">Claim a .kachat name, make it your name, and keep it.</span></span>
           ${ICONS.chevron}
         </button>
+        <button class="conn-card" id="kusdt-guide">
+          <span class="conn-card-icon kusdt-help-icon">${kusdtCoinIconHtml(22)}</span>
+          <span class="conn-card-text"><span class="conn-card-title">kUSDT Guide</span><span class="muted small">What kUSDT is, where it lives, sending, combining and the risks.</span></span>
+          ${ICONS.chevron}
+        </button>
       </div>
     </section>`, "settings");
   $("#back").onclick = onBack;
+  $("#kusdt-guide").onclick = () => import("./kusdt-screens.js").then((m) => m.openKusdtGuide({ onBack: again }));
   $("#kachat-guide").onclick = () => import("./market.js").then((m) => m.showAboutKachat({ onBack: again, screen: "settings" }));
 }
 
@@ -548,6 +555,8 @@ async function showConnectionSection({ onBack }) {
     restApi: getEndpointOverride("kaspaApi"),
     // the .kachat names indexer (iOS 59593af, Connection > Domains); blank = the network's default
     kachatIndexer: getEndpointOverride("kachatNamesIndexer"),
+    // Trestly's kUSDT API (K-Desktop Connection Settings, KaPay iOS 3d126db trestlyAPIURL)
+    trestlyApi: getEndpointOverride("trestlyApi"),
     bookLabel: "",
     bookAddress: "",
     bookError: "",
@@ -665,6 +674,14 @@ async function showConnectionSection({ onBack }) {
         <span class="error-text small" id="rest-error">${/^http:\/\//i.test(draft.restApi.trim()) ? HTTPS_REQUIRED : ""}</span>
       </div></div>
       <div class="form-footer">REST API for transaction history and balance lookups</div>
+    </div>
+    <div class="form-section">
+      <div class="form-header">kUSDT</div>
+      <div class="form-card"><div class="form-row stack-tight"><span class="muted small">Trestly API URL</span>
+        <input id="trestly" class="plain-input mono" value="${esc(draft.trestlyApi)}" placeholder="${esc(ENDPOINT_DEFAULTS.trestlyApi)}" autocomplete="off" spellcheck="false" />
+        <span class="error-text small" id="trestly-error">${/^http:\/\//i.test(draft.trestlyApi.trim()) ? HTTPS_REQUIRED : ""}</span>
+      </div></div>
+      <div class="form-footer">Where your kUSDT balances are read. Every coin it lists is checked on a Kaspa node before it counts.</div>
     </div>`;
 
   const paint = () => {
@@ -741,6 +758,12 @@ async function showConnectionSection({ onBack }) {
       $("#rest-error").textContent = /^http:\/\//i.test(rest.value.trim()) ? HTTPS_REQUIRED : "";
     };
 
+    const trestly = $("#trestly");
+    if (trestly) trestly.oninput = () => {
+      draft.trestlyApi = trestly.value;
+      $("#trestly-error").textContent = /^http:\/\//i.test(trestly.value.trim()) ? HTTPS_REQUIRED : "";
+    };
+
     const save = $("#save");
     if (save) save.onclick = async () => {
       const defaultRest = IS_TESTNET ? TESTNET_REST : ENDPOINT_DEFAULTS.kaspaApi;
@@ -749,12 +772,15 @@ async function showConnectionSection({ onBack }) {
       // blank: the network's default indexer (none on Testnet)
       const indexerParsed = draft.kachatIndexer.trim() ? normalizeHttpsUrl(draft.kachatIndexer, "") : { value: "" };
       if (indexerParsed.error) { draft.error = indexerParsed.error; toast(indexerParsed.error); paint(); return; }
+      const trestlyParsed = normalizeHttpsUrl(draft.trestlyApi, ENDPOINT_DEFAULTS.trestlyApi);
+      if (trestlyParsed.error) { draft.error = trestlyParsed.error; toast(trestlyParsed.error); paint(); return; }
       // A REST API other than api.kaspa.org, or an indexer other than KaChat's, needs the browser's
       // permission to be reached. The request has to come straight from this click, before
       // anything else is awaited - one request for both.
       const origins = [];
       if (parsed.value !== defaultRest && parsed.value !== ENDPOINT_DEFAULTS.kaspaApi) origins.push(`${new URL(parsed.value).origin}/*`);
       if (indexerParsed.value && indexerParsed.value !== DEFAULT_MAINNET_INDEXER) origins.push(`${new URL(indexerParsed.value).origin}/*`);
+      if (trestlyParsed.value !== ENDPOINT_DEFAULTS.trestlyApi) origins.push(`${new URL(trestlyParsed.value).origin}/*`);
       if (origins.length && ext?.permissions?.request) {
         let granted = false;
         try { granted = await ext.permissions.request({ origins }); } catch { granted = false; }
@@ -765,6 +791,7 @@ async function showConnectionSection({ onBack }) {
       // the registry picks its source again with the new indexer
       if (indexerChanged) kachatRegistry()?.refresh().catch(() => {});
       setEndpoint("kaspaApi", parsed.value);
+      setEndpoint("trestlyApi", trestlyParsed.value === ENDPOINT_DEFAULTS.trestlyApi ? "" : trestlyParsed.value);
       // The background worker has no localStorage; it reads the REST API from here.
       await saveSettings({ [IS_TESTNET ? "restApiTestnet" : "restApi"]: parsed.value });
       toast("Settings saved.");

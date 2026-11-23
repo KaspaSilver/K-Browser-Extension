@@ -38,8 +38,8 @@ function sync(dir) {
     copied += 1;
   }
 }
-for (const dir of ["engine", "ui", "kaspa"]) sync(dir);
-const dirty = execFileSync("git", ["status", "--porcelain", "--", "engine", "ui/kspt.js", "ui/bip39-english.js", "ui/account-backup-status.js", "ui/account-import.js", "kaspa"], { cwd: desktop }).toString().trim();
+for (const dir of ["engine", "ui", "kaspa", "kusdt"]) sync(dir);
+const dirty = execFileSync("git", ["status", "--porcelain", "--", "engine", "ui/kspt.js", "ui/bip39-english.js", "ui/account-backup-status.js", "ui/account-import.js", "ui/kusdt-wallet.js", "kaspa", "kusdt"], { cwd: desktop }).toString().trim();
 if (dirty) console.log("note: KaChat-Desktop has uncommitted changes in synced folders - left out (copied from HEAD):\n" + dirty);
 const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: desktop }).toString().trim();
 console.log(`copied ${copied} files from KaChat-Desktop ${commit}`);

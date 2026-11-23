@@ -37,6 +37,8 @@ as K on iPhone and KaChat on Android and desktop.
 - A fresh receiving address every time, and Manage Addresses for your spending addresses:
   generate, discover, rename, hide and set the primary
 - History, coins (UTXOs) and Compound for every address
+- kUSDT, the dollar stablecoin on Kaspa bridged by Trestly: balances, send and receive it, combine
+  its coins, and Swap Stablecoins on Trestly's site
 - Contacts: save the people you pay by address or name
 - Your domains on every Kaspa name service (.kas, .k, .kaspa) and .kachat names: claim a .kachat
   name, set your primary .kas name and send a domain to someone else
@@ -88,6 +90,8 @@ signatures with the user's approval.
   Portfolio's price history.
 - Host permissions `api.gateio.ws`, `query1.finance.yahoo.com` - Portfolio: long-range KAS price
   history (fallback) and the comparison charts (VOO, gold, silver).
+- Host permissions `api.trestly.io`, `testnet.trestly.io` - Trestly's kUSDT API: the kUSDT coins
+  the user's own addresses hold (each checked on a Kaspa node before it counts).
 - Content scripts on `https://*/*` (and localhost) - provide `window.kachat`, the interface Kaspa
   websites use to ask the wallet for a connection, payment or signature. The scripts only relay
   those requests; they do not read or change page content, and the wallet uses this access for
@@ -98,13 +102,16 @@ signatures with the user's approval.
     another coin; the user pays the ChangeNOW deposit address themselves);
   - a custom Kaspa REST API or .kachat names indexer the user types into Settings.
 
-**Remote code:** No. All code, including the Kaspa WebAssembly module, is in the package.
-(`wasm-unsafe-eval` in the CSP lets the bundled WebAssembly compile; nothing is fetched and run.)
+**Remote code:** No. All code, including the Kaspa WebAssembly module and kUSDT's transaction
+builder (a WebAssembly module checked against its pinned SHA-256 before it compiles), is in the
+package. (`wasm-unsafe-eval` in the CSP lets the bundled WebAssembly compile; nothing is fetched
+and run.)
 
 **Data usage:** tick "Financial and payment information" (public blockchain addresses) only.
 Public Kaspa addresses are sent to the Kaspa network and the APIs above to show balances and send
 transactions, and the user's chatting address is sent to KaChat's indexer (`indexer.kachat.app`)
-to read its .kachat names. Nothing else is sent, nothing is stored about
+to read its .kachat names, and the user's own addresses are sent to Trestly's API
+(`api.trestly.io`) to read the kUSDT they hold. Nothing else is sent, nothing is stored about
 the user, and the address is not sold, not used for unrelated purposes and not used for
 creditworthiness. Like any web request, these services see the user's IP address. Tick all three
 certifications (not sold to third parties, not used for unrelated purposes, not used for credit).

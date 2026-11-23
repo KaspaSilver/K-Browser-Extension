@@ -64,6 +64,16 @@ import { sompiFromUserText } from "./amounts.js";
 import { showAddToPortfolio } from "./portfolio.js";
 import { loadOwnAddresses, ownAddressLabel } from "./own-addresses.js";
 import { bindSwipeToHide } from "./swipe-hide.js";
+import { kusdtListedIndices } from "./kusdt.js";
+import { KUSDT_LISTED_HIDE_MESSAGE, KUSDT_LISTED_ALERT_TITLE } from "../shared/ui/kusdt-wallet.js";
+
+/** §11 (K-Desktop, KaPay iOS 3d126db): an address Manage kUSDT lists stays on Manage Addresses.
+ *  True (and the alert shown) when hiding `index` is refused. */
+function refuseHidingKusdtListed(index) {
+  if (!kusdtListedIndices().has(Number(index))) return false;
+  showAlert({ title: KUSDT_LISTED_ALERT_TITLE, message: KUSDT_LISTED_HIDE_MESSAGE, confirmLabel: "OK" });
+  return true;
+}
 
 // The quantum-safe shield (iOS bba1b1e): green while the address's key has never been on chain
 // (receiving any number of times is fine); slashed once it has spent - orange when funds sit on it
@@ -561,6 +571,13 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
   const load = async () => {
     try {
       state.list = await wallet.spendingList();
+      // §11: an address Manage kUSDT lists that was hidden comes back (K-Desktop reshowListedHidden)
+      const listed = kusdtListedIndices();
+      const comeBack = state.list.rows.filter((r) => r.hidden && listed.has(r.index));
+      if (comeBack.length) {
+        for (const r of comeBack) { try { await wallet.setSpendingHidden(r.index, false); } catch { /* stays hidden */ } }
+        state.list = await wallet.spendingList();
+      }
       listSnapshot = state.list;
       state.error = "";
       try {
@@ -708,6 +725,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
   };
 
   const hideAddress = async (row) => {
+    if (refuseHidingKusdtListed(row.index)) { paint(); return; }
     try {
       // The balance is checked again on chain before hiding (iOS setSpendingAddressHidden).
       await wallet.setSpendingHidden(row.index, true);
@@ -1028,6 +1046,7 @@ function showVisibility({ onBack }) {
   };
 
   const toggle = async (row) => {
+    if (row.revealed && row.visible && refuseHidingKusdtListed(row.index)) return;
     try {
       if (!row.revealed) await wallet.revealSpendingAddress(row.index);
       else await wallet.setSpendingHidden(row.index, row.visible);
@@ -1083,7 +1102,7 @@ function showVisibility({ onBack }) {
       message: "Every spending address leaves the list; only the chatting address stays. Their Kaspa still counts in your totals, and you can show any of them again here.",
       confirmLabel: "Hide All",
       cancelLabel: "Cancel",
-      onConfirm: async () => { try { await wallet.hideAllSpending(); } catch (error) { toast(error.message); } await loadList(); if (here()) paint(); },
+      onConfirm: async () => { try { await wallet.hideAllSpending(kusdtListedIndices()); } catch (error) { toast(error.message); } await loadList(); if (here()) paint(); },
     });
   }
 
