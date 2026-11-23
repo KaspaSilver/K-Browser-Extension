@@ -4,7 +4,8 @@
 //   ColdStorageListView          the tab root: watch-only KasSigner accounts, Paste kpub / Scan,
 //                                Enter kpub, Name This Account, the account actions sheet
 //                                (Copy kpub, Show kpub QR, Rename) and the kpub QR page
-//   ColdStorageDetailView        one account: Name, kpub, Total Balance, Address Actions
+//   ColdStorageDetailView        one account: Name, Total Balance, the addresses, and the floating
+//                                Address Actions button (Copy kpub lives there: no kpub on screen)
 //                                (Generate More, Discover, Address Visibility), its addresses
 //   ColdStorageAddressVisibilityView   the checklist, 50 a page, endless
 //   ColdStorageAddressTransactionHistoryView   one address: History | UTXOs | .kachat,
@@ -35,7 +36,7 @@ import { addressDomainsTab } from "./address-domains.js";
 import { kachatRegistry } from "./kachat-names.js";
 import { showAddToPortfolio } from "./portfolio.js";
 import { showColdSend } from "./cold-send.js";
-import { unreadableBalanceHtml, addressOptionsButtonHtml, showAddressActions, showPublicKey, fiatTextFor } from "./manage.js";
+import { unreadableBalanceHtml, addressOptionsButtonHtml, showAddressActions, showPublicKey, fiatTextFor, addressActionsFabHtml } from "./manage.js";
 import { SF, txDate, feeText, portfolioKas, middle, shortAddress, fieldSheet } from "./cold-common.js";
 
 const INVALID_KPUB = "That doesn't look like a valid Kaspa extended public key (kpub).";
@@ -372,7 +373,6 @@ export function showColdStorage() {
             <span class="accent cold-account-lock">${SF.lockFill}</span>
             <span class="tx-meta">
               <span class="cold-account-label">${esc(account.label)}</span>
-              <span class="muted tiny cold-account-kpub">${esc(middle(account.kpub, 15))}</span>
             </span>
             <button class="icon plain cold-more" data-more="${esc(account.id)}" aria-label="Account actions">${SF.ellipsis}</button>
           </div>`).join("")}
@@ -394,7 +394,7 @@ export function showColdStorage() {
       row.onkeydown = (event) => { if (event.key === "Enter") row.click(); };
     }
     for (const button of app.querySelectorAll("[data-more]")) button.onclick = () => accountActions(byId(button.dataset.more));
-    $("#paste-kpub").onclick = () => manualEntry();
+    $("#paste-kpub").onclick = () => pasteKpub();
     $("#scan-kpub").onclick = async () => {
       const code = await scanQr({ title: "Scan QR Code", hint: "Point camera at a QR code" });
       if (code) beginImport(code);
@@ -413,6 +413,17 @@ export function showColdStorage() {
   // Paints at once from what is known, then from storage.
   paint(store.accounts.length ? store.accounts : null);
   refresh();
+
+  // Paste kpub takes what's on the clipboard at once (K iOS b0f0a4e6): a valid kpub goes straight
+  // to Name This Account, anything else is a toast. A clipboard the browser won't read opens the
+  // Enter kpub sheet to paste into instead.
+  async function pasteKpub() {
+    let text;
+    try { text = (await navigator.clipboard.readText()).trim(); } catch { manualEntry(); return; }
+    const kpub = text ? await wallet.validateKpub(text) : null;
+    if (!kpub) { toast("Not a valid kpub"); return; }
+    beginImport(kpub);
+  }
 
   // Enter kpub: a half sheet with one field.
   function manualEntry() {
@@ -494,11 +505,13 @@ export function showColdStorage() {
 /** A kpub reveals every address of the account: copied like a secret, cleared 30 s later (K iOS
  *  ColdStorageClipboard.copyKpub). */
 function copyKpub(kpub) {
-  return copySecret(kpub, "kpub copied to clipboard. Clipboard will clear in 30s.");
+  // nothing on screen to select instead (K iOS b0f0a4e6 took the kpub text away)
+  return copySecret(kpub, "kpub copied to clipboard. Clipboard will clear in 30s.", "Couldn't copy the kpub. Try again, or scan it from Show kpub QR.");
 }
 
 // iOS ColdStorageKpubQRView: a white page, the kpub's QR (error correction L) in the accent
-// frame, the kpub, what showing it means, "Tap anywhere to copy".
+// frame, what showing it means, "Tap anywhere to copy". No kpub text (K iOS b0f0a4e6): only the
+// QR, for scanning.
 /** A Cold Storage address's receive screen (KaPay iOS e188209): Kaspa only - Cold Storage can't
  *  move kUSDT - and its key is on the KasSigner. */
 function coldReceive({ label, address, onBack }) {
@@ -517,7 +530,6 @@ async function showKpubQr({ account, onBack }) {
     </header>
     <section class="qr-page cold-kpub-page" id="qr-page" title="Tap anywhere to copy">
       <div class="qr-frame cold-kpub-frame"><canvas id="qr" width="520" height="520" aria-label="QR code for the kpub"></canvas></div>
-      <div class="cold-kpub-text">${esc(account.kpub)}</div>
       <p class="cold-kpub-note">Watch-only. This cannot spend, but it reveals every address in this account.</p>
       <p class="qr-hint">Tap anywhere to copy</p>
     </section>`, "qr");
@@ -525,7 +537,7 @@ async function showKpubQr({ account, onBack }) {
   $("#qr-page").onclick = () => copyKpub(account.kpub);
   try {
     await QRCode.toCanvas($("#qr"), account.kpub, { errorCorrectionLevel: "L", margin: 1, width: 520, color: { dark: "#000000", light: "#ffffff" } });
-  } catch { /* the kpub text is still there to copy */ }
+  } catch { /* a tap still copies it */ }
 }
 
 // =============================================================================================
@@ -685,6 +697,8 @@ function showAccount({ accountId, onBack }) {
       { label: "Generate More Addresses", subtitle: "Reveals the next unused address in this account.", icon: SF.plusCircle, busy: state.busy === "generate", disabled: discovering, onClick: generate },
       { label: "Discover Addresses", subtitle: "Finds addresses holding a balance or a domain.", icon: SF.magnifier, disabled: discovering, keepOpen: true, onClick: discover },
       { label: "Address Visibility", subtitle: "Check off every address you want on the list, in one sitting.", icon: SF.checklist, disabled: discovering, onClick: () => showVisibility({ accountId, onDone: back }) },
+      // the kpub is never on screen (K iOS b0f0a4e6): it reveals every address, so it is only copied
+      { label: "Copy kpub", subtitle: "Puts this account's kpub on the clipboard. It reveals all its addresses.", icon: SF.doc, disabled: discovering, onClick: () => copyKpub(state.account.kpub) },
     ];
   };
 
@@ -812,14 +826,8 @@ function showAccount({ accountId, onBack }) {
             <div class="tx-meta"><span class="muted cold-caption">Name</span><span class="strong cold-name">${esc(account.label)}</span></div>
             <button class="icon plain accent cold-pencil" id="rename-account" aria-label="Rename Account">${SF.pencilSmall}</button>
           </div>
-          <div class="cold-summary-kpub">
-            <span class="muted cold-caption">kpub</span>
-            <span class="mono cold-kpub">${esc(account.kpub)}</span>
-            <button class="link-button cold-copy-kpub" id="copy-kpub">${SF.docSmall}<span>Copy kpub</span></button>
-          </div>
-          ${balanceCardHtml({ label: "Total Balance", sompi: state.entries ? total : null, unknown: Boolean(state.entries) && Boolean(unread), fiatText: state.entries && !unread ? fiatTextFor(total, repaintIfHere) : "" })}
-          <button class="ios-capsule" id="address-actions" ${busy ? "disabled" : ""}>${busy ? '<span class="spinner dark-spinner small-spin"></span>' : "Address Actions"}</button>
         </div>
+        ${balanceCardHtml({ label: "Total Balance", sompi: state.entries ? total : null, unknown: Boolean(state.entries) && Boolean(unread), fiatText: state.entries && !unread ? fiatTextFor(total, repaintIfHere) : "" })}
         ${state.loading && !state.entries ? '<div class="center-text cold-loading"><span class="spinner"></span></div>'
           : !rows.length ? '<p class="muted cold-none">No addresses discovered yet.</p>'
           : rows.map((entry) => `
@@ -834,7 +842,9 @@ function showAccount({ accountId, onBack }) {
               </div>
               <button class="icon plain card-menu" data-menu="${entry.index}" aria-label="Address actions">${SF.ellipsisV}</button>
             </div>`).join("")}
-      </div>`, "cold:account");
+        <div class="fab-room"></div>
+      </div>
+      ${addressActionsFabHtml(busy)}`, "cold:account");
     app.dataset.coldAccount = accountId;
     dock.remember(() => paint());
     const scroller = app.querySelector(".manage-scroll");
@@ -842,7 +852,6 @@ function showAccount({ accountId, onBack }) {
     $("#back").onclick = onBack;
     $("#remove").onclick = removeAccount;
     $("#rename-account").onclick = renameAccount;
-    $("#copy-kpub").onclick = () => copyKpub(account.kpub);
     $("#address-actions").onclick = openActions;
     const byIndex = (index) => state.entries.find((e) => e.index === Number(index));
     for (const card of app.querySelectorAll("[data-open]")) {

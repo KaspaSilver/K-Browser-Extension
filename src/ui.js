@@ -102,11 +102,11 @@ export async function saveSettings(patch) {
  * Copies a secret (phrase, private key) and wipes it from the clipboard 30 seconds later if it
  * is still there - iOS copies these local-only with a 30 s expiry.
  */
-export async function copySecret(text, message) {
+export async function copySecret(text, message, failMessage = "Couldn't copy - select and copy it instead") {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
-    toast("Couldn't copy - select and copy it instead");
+    toast(failMessage);
     return;
   }
   // The popup closes as soon as you click away to paste, so the clipboard is cleared by the

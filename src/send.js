@@ -823,7 +823,7 @@ export function showSend(opts) {
       return `<p class="error-text small center-text">${esc(message)}</p>
         ${state.error && !state.coinsUnread ? "" : '<p class="center-text"><button class="link-button small" id="fee-retry">Try Again</button></p>'}`;
     }
-    if (tooManyPicked()) return `<p class="error-text small center-text">${esc(`One transaction can spend ${MAX_SEND_INPUT_LIMIT} coins. Pick fewer in Coin Control.`)}</p>`;
+    if (tooManyPicked()) return `<p class="error-text small center-text">${esc(`One transaction can spend ${MAX_SEND_INPUT_LIMIT} coins. Pick fewer in UTXO Selection.`)}</p>`;
     if ((state.maxMode || opts.compound) && state.maxCapped && !state.estimating) {
       return `<p class="ss-footnote">${esc(opts.compound ? COMPOUND_CAPPED_NOTE : MAX_CAPPED_NOTE)}</p>`;
     }
@@ -1077,7 +1077,7 @@ function friendlySendError(error) {
   return message || "Send failed.";
 }
 
-// --- Coin Control: iOS CoinControlView --------------------------------------------------------
+// --- UTXO Selection (K iOS b0f0a4e6 renamed Coin Control): iOS CoinControlView --------------------------------------------------------
 
 export function showCoinControl({ coins, selected, labels = {}, unavailable = () => null, onCancel, onDone }) {
   // Coins a send can't spend (`unavailable(coin)` says why) are listed greyed out and never picked,
@@ -1092,7 +1092,7 @@ export function showCoinControl({ coins, selected, labels = {}, unavailable = ()
     render(`
       <header class="navbar form-bar">
         <button class="bar-text" id="cancel">Cancel</button>
-        <div class="nav-title">Coin Control</div>
+        <div class="nav-title">UTXO Selection</div>
         <button class="icon plain nav-menu accent" id="menu" aria-label="More">${ICONS.ellipsis}</button>
       </header>
       ${menuOpen ? `

@@ -28,7 +28,6 @@ body.tab #app[data-screen^="cold:"], body.tab #app[data-screen="cold-visibility"
 .cold-account .tx-meta { gap: 4px; }
 .cold-account-lock { display: inline-flex; flex: none; }
 .cold-account-label { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cold-account-kpub { white-space: nowrap; overflow: hidden; }
 .cold-more { color: var(--muted); flex: none; }
 .cold-list-bar { padding: 10px 16px 16px; background: transparent; }
 
@@ -41,9 +40,6 @@ body.tab #app[data-screen^="cold:"], body.tab #app[data-screen="cold-visibility"
 .cold-summary-name { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .cold-name { font-size: 15px; word-break: break-word; }
 .cold-pencil { width: 32px; height: 32px; flex: none; }
-.cold-summary-kpub { display: flex; flex-direction: column; gap: 6px; }
-.cold-kpub { font-size: 12px; word-break: break-all; user-select: text; line-height: 1.35; }
-.cold-copy-kpub { align-self: flex-start; font-size: 12px; font-weight: 650; gap: 5px; }
 .cold-total { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .cold-loading { padding-top: 20px; }
 .cold-none { padding: 4px 4px 0; }
@@ -71,7 +67,6 @@ textarea.cold-field { min-height: 0; resize: none; font-size: 13px; line-height:
 /* --- the kpub QR (white page) -------------------------------------------------------------- */
 .cold-kpub-page { gap: 16px; }
 .cold-kpub-frame canvas { width: 230px !important; height: 230px !important; }
-.cold-kpub-text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; color: rgba(0, 0, 0, .7); word-break: break-all; padding: 0 8px; }
 .cold-kpub-note { font-size: 13px; color: rgba(0, 0, 0, .45); margin: 0; padding: 0 12px; }
 
 /* --- one address ------------------------------------------------------------------------- */

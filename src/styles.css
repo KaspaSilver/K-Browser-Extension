@@ -699,6 +699,9 @@ body.tab #app[data-screen="visibility"], body.tab #app[data-screen="coins"] { he
 .ios-tx-icon.out, .ios-tx-title.out, .ios-tx-amount.out { color: #ff453a; }
 .ios-tx-icon.in, .ios-tx-title.in, .ios-tx-amount.in { color: #30d158; }
 .ios-tx-title { font-size: 12px; font-weight: 650; color: var(--muted); }
+/* change to this wallet's other addresses under a Sent / Moved row (K iOS b0f0a4e6) */
+/* wraps rather than cutting the amount off: the popup is narrower than the phone */
+.ios-tx-change { font-size: 11px; font-weight: 550; color: #ff9f0a; line-height: 1.25; overflow-wrap: anywhere; }
 .ios-tx-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
 .ios-tx-amount { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ios-utxo { gap: 10px; align-items: center; }
@@ -946,8 +949,14 @@ html:has(#app[data-screen="qr"]), body:has(#app[data-screen="qr"]) { background:
 button.sk-pill:disabled { opacity: 1; background: var(--panel) !important; color: var(--muted) !important; }
 .sk-fee-row { display: flex; align-items: center; justify-content: space-between; font-size: 15px; }
 .sk-divider { height: .5px; background: rgba(255,255,255,.12); }
-.sk-coin-row { display: flex; justify-content: space-between; align-items: center; background: transparent; color: var(--text); font-weight: 400; font-size: 15px; padding: 0; }
-.sk-coin-row .muted { display: inline-flex; align-items: center; gap: 4px; }
+/* UTXO Selection: its own card above the fee (K iOS b0f0a4e6) */
+.sk-utxo-card { flex-direction: row; align-items: center; gap: 12px; width: 100%; text-align: left; color: var(--text); font-weight: 400; cursor: pointer; }
+.sk-utxo-card:hover { border-color: rgba(255,255,255,.2); }
+.sk-utxo-icon { flex: none; width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--kaspa); background: color-mix(in srgb, var(--kaspa) 15%, transparent); }
+.sk-utxo-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sk-utxo-title { font-size: 14px; font-weight: 600; }
+.sk-utxo-summary { font-size: 14px; white-space: nowrap; }
+.sk-utxo-chevron { display: inline-flex; }
 .spinner.dark { border-color: rgba(0,0,0,.25); border-top-color: #000; }
 .bar-spacer { visibility: hidden; }
 .faucet-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border-radius: 18px; background: rgba(112,199,186,.15); color: var(--text); font-weight: 400; text-align: left; }
@@ -1283,7 +1292,6 @@ body.dock-on #app[data-screen="settings"] .form > * { flex-shrink: 0; }
 .about-price-note { margin: 0; padding: 10px 16px 8px; border-top: .5px solid var(--line); }
 
 /* Cold Storage's account header holds the balance card itself (K iOS KaspaAddressBalanceCard). */
-.cold-summary .bal-card { margin: 0; }
 
 /* Contacts editor (K iOS AddressBookEntryEditor): the name with a clear button, and Use Their Domain
    Name under it once a typed domain resolved. */
@@ -1294,3 +1302,15 @@ body.dock-on #app[data-screen="settings"] .form > * { flex-shrink: 0; }
 .ab-suggest { display: flex; align-items: center; gap: 8px; width: 100%; background: transparent; color: var(--kaspa); font: inherit; font-size: 14px; text-align: left; cursor: pointer; border-top: .5px solid var(--line); }
 .ab-suggest svg { width: 16px; height: 16px; flex: none; }
 #ab-save:disabled { opacity: .4; cursor: default; }
+
+/* Manage Addresses: swipe left to hide (K iOS b0f0a4e6). The orange button only fills the gap the
+   card leaves as it slides, so the glass card never shows it through. */
+.swipe-wrap { position: relative; overflow: hidden; border-radius: 20px; flex: none; }
+.swipe-card { position: relative; touch-action: pan-y; user-select: none; }
+.swipe-hide {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 0; padding: 0; overflow: hidden;
+  border-radius: 0 20px 20px 0; background: #ff9f0a; color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.swipe-hide svg { width: 18px; height: 18px; }

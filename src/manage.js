@@ -62,6 +62,8 @@ import { carryAccountData } from "./account-data.js";
 import { shownActiveAccount, SWITCHED_ELSEWHERE } from "./account-scope.js";
 import { sompiFromUserText } from "./amounts.js";
 import { showAddToPortfolio } from "./portfolio.js";
+import { loadOwnAddresses, ownAddressLabel } from "./own-addresses.js";
+import { bindSwipeToHide } from "./swipe-hide.js";
 
 // The quantum-safe shield (iOS bba1b1e): green while the address's key has never been on chain
 // (receiving any number of times is fine); slashed once it has spent - orange when funds sit on it
@@ -163,21 +165,48 @@ function historyHtml(state) {
   if (!txs.length) return '<div class="list-row muted">No transactions yet.</div>';
   return txs.map((tx, i) => {
     const cls = tx.direction === "out" ? "out" : tx.direction === "in" ? "in" : "none";
+    const breakdown = tx.direction === "out" ? outgoingBreakdown(tx, state.address) : null;
+    const moved = Boolean(breakdown) && breakdown.toOthers === 0n && breakdown.changeTotal > 0n;
+    const amountSompi = breakdown ? (moved ? breakdown.changeTotal : breakdown.toOthers) : tx.amountSompi;
+    const changeLines = (breakdown?.change || []).map((line) => `<span class="ios-tx-change">${esc(moved
+      ? `To ${line.label}`
+      : `Change ${groupedKas8(line.sompi)} KAS to ${line.label}`)}</span>`).join("");
     return `
       <button class="list-row ios-tx" data-tx="${i}">
         <span class="ios-tx-icon ${cls}">${tx.direction === "out" ? SF.arrowUpFill : SF.arrowDownFill}</span>
         <span class="tx-meta">
-          <span class="ios-tx-title ${cls}">${tx.direction === "out" ? "Sent" : tx.direction === "in" ? "Received" : "Transaction"}</span>
+          <span class="ios-tx-title ${cls}">${tx.direction === "out" ? (moved ? "Moved" : "Sent") : tx.direction === "in" ? "Received" : "Transaction"}</span>
+          ${changeLines}
           <span class="mono tiny muted">${esc(middle(tx.txid, 6))}</span>
           ${tx.time ? `<span class="tiny muted">${esc(txDate(tx.time))}</span>` : ""}
         </span>
         <span class="ios-tx-right">
-          ${tx.direction ? `<span class="ios-tx-amount ${cls}">${tx.direction === "out" ? "-" : "+"}${esc(groupedKas8(tx.amountSompi))} KAS</span>` : ""}
+          ${tx.direction ? `<span class="ios-tx-amount ${cls}">${tx.direction === "out" ? "-" : "+"}${esc(groupedKas8(amountSompi))} KAS</span>` : ""}
           ${tx.feeSompi != null ? `<span class="tiny muted">${esc(feeText(tx.feeSompi))}</span>` : ""}
         </span>
         <span class="accent">${SF.upRightSquare}</span>
       </button>`;
   }).join("");
+}
+
+/**
+ * Where an outgoing transaction's Kaspa went, by owner (K iOS b0f0a4e6 / 800dcb75): to other
+ * people, and to this wallet's other addresses (the change, by label, in output order), so a Sent
+ * row adds up - an address that got 10 and sent 1 shows where the 8.99 of change went.
+ */
+function outgoingBreakdown(tx, address) {
+  const self = String(address || "").toLowerCase();
+  let toOthers = 0n;
+  const change = [];
+  for (const output of tx.paidTo || []) {
+    const to = String(output.address || "").toLowerCase();
+    if (!to || to === self) continue;
+    const label = ownAddressLabel(to);
+    if (!label) { toOthers += output.sompi; continue; }
+    const line = change.find((c) => c.label === label);
+    if (line) line.sompi += output.sompi; else change.push({ label, sompi: output.sompi });
+  }
+  return { toOthers, change, changeTotal: change.reduce((sum, c) => sum + c.sompi, 0n) };
 }
 
 // iOS TransactionActionsSheet: Open in Explorer, and Add to Portfolio when the transaction has
@@ -263,12 +292,21 @@ export function unreadableBalanceHtml(className = "") {
   </div>`;
 }
 
+// slider.horizontal.3: the floating Address Actions button (K iOS ManageAddressesView)
+const SLIDERS = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M3 6h9M16 6h5M3 12h3M10 12h11M3 18h11M18 18h3"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg>';
+
+/** The floating glass button behind "Address Actions" (K iOS addressActionsButton), bottom right:
+ *  Manage Addresses and a Cold Storage account. A spinner while it generates or discovers. */
+export function addressActionsFabHtml(busy) {
+  return `<button class="fab" id="address-actions" aria-label="Address Actions" title="Address Actions" ${busy ? "disabled" : ""}>${busy ? '<span class="spinner small-spin"></span>' : SLIDERS}</button>`;
+}
+
 function loaders(state, address, repaintIfHere) {
   const loadHistory = () => {
     state.historyLoading = true;
     repaintIfHere();
-    wallet.history(address)
-      .then((result) => { state.history = result; })
+    Promise.all([wallet.history(address), loadOwnAddresses().catch(() => false)])
+      .then(([result]) => { state.history = result; })
       .catch(() => { state.history = { txs: [], complete: false }; })
       .finally(() => { state.historyLoading = false; repaintIfHere(); });
   };
@@ -786,7 +824,6 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
           unknown: (!state.list && Boolean(state.error)) || (Boolean(state.list) && chattingUnread),
           fiatText: state.list && !chattingUnread ? fiatTextFor(total, () => { if (here()) paint(); }) : "",
         })}
-        <button class="ios-capsule" id="address-actions" ${busy ? "disabled" : ""}>${busy ? '<span class="spinner dark-spinner small-spin"></span>' : "Address Actions"}</button>
         ${state.error ? `<p class="error">${esc(state.error)}</p>` : ""}
         ${state.loading && !state.list ? '<div class="center-text"><span class="spinner"></span></div>' : ""}
         ${chattingCard}
@@ -794,18 +831,23 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
           <div class="km-empty"><span class="muted">${SF.creditcard}</span><div class="km-title">No Spending Addresses</div>
           <p class="muted small">Generate one below to start sending payments from a separate address than the one you chat from.</p></div>` : ""}
         ${rows.map((row) => `
-          <div class="glass address-card" data-open="${row.index}" role="button" tabindex="0">
-            <div class="address-card-main">
-              <span class="muted small medium">${esc(displayLabel(row))}${quantumShieldHtml(row)}</span>
-              <span class="mono small">${esc(shortAddress(row.address))}</span>
-              <span class="strong small">${esc(groupedKas8(row.balanceSompi))} KAS</span>
-              <span class="address-status">${usedBadge(row)}${domainOwners.get(row.address) ? '<span class="domain-tag">Contains domain</span>' : ""}</span>
+          <div class="swipe-wrap" data-swipe="${row.index}">
+            <button class="swipe-hide" tabindex="-1" aria-label="Hide Address">${SF.eyeSlashFill}<span>Hide</span></button>
+            <div class="glass address-card swipe-card" data-open="${row.index}" role="button" tabindex="0">
+              <div class="address-card-main">
+                <span class="muted small medium">${esc(displayLabel(row))}${quantumShieldHtml(row)}</span>
+                <span class="mono small">${esc(shortAddress(row.address))}</span>
+                <span class="strong small">${esc(groupedKas8(row.balanceSompi))} KAS</span>
+                <span class="address-status">${usedBadge(row)}${domainOwners.get(row.address) ? '<span class="domain-tag">Contains domain</span>' : ""}</span>
+              </div>
+              ${state.busy?.primary === row.index
+                ? '<span class="spinner small-spin"></span>'
+                : `<button class="icon plain card-menu" data-menu="${row.index}" aria-label="More" ${state.busy?.primary != null ? "disabled" : ""}>${SF.ellipsisV}</button>`}
             </div>
-            ${state.busy?.primary === row.index
-              ? '<span class="spinner small-spin"></span>'
-              : `<button class="icon plain card-menu" data-menu="${row.index}" aria-label="More" ${state.busy?.primary != null ? "disabled" : ""}>${SF.ellipsisV}</button>`}
           </div>`).join("")}
-      </div>`, "manage-list");
+        <div class="fab-room"></div>
+      </div>
+      ${addressActionsFabHtml(busy)}`, "manage-list");
     remember(() => paint());
     const scroller = app.querySelector(".manage-scroll");
     if (scroller) scroller.scrollTop = scroll;
@@ -814,9 +856,14 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     const chattingEl = $("#open-chatting");
     if (chattingEl) chattingEl.onclick = () => showManageAddress({ address: state.chatting.address, onBack: back, onChangeIdentity });
     const byIndex = (index) => state.list.rows.find((r) => r.index === Number(index));
+    const swipes = new Map();
+    for (const wrap of app.querySelectorAll("[data-swipe]")) {
+      swipes.set(wrap.dataset.swipe, bindSwipeToHide(wrap, { onHide: () => hideAddress(byIndex(wrap.dataset.swipe)) }));
+    }
     for (const card of app.querySelectorAll("[data-open]")) {
       card.onclick = (event) => {
         if (event.target.closest("[data-menu]")) return;
+        if (swipes.get(card.dataset.open)?.wasSwiped()) return;
         showSpendingAddress({ row: byIndex(card.dataset.open), onBack: back });
       };
       card.onkeydown = (event) => { if (event.key === "Enter") card.click(); };
@@ -853,6 +900,7 @@ function showSpendingAddress({ row, onBack }) {
   const title = row.label;
   const state = {
     tab: "history", history: null, historyLoading: false, coins: null, coinsLoading: false, coinsError: "", labels: {},
+    address: row.address,
   };
   const back = () => paint();
   const here = () => app.dataset.screen === "manage-spending";

@@ -204,7 +204,7 @@ export function pillHtml(content, { id = null, disabled = false } = {}) {
     : `<span class="sk-pill">${content}</span>`;
 }
 
-// --- Fee and coin control (SendFeeControls) ------------------------------------------------
+// --- UTXO Selection and fee (SendFeeControls) ------------------------------------------------
 
 export const FEE_TIERS = [
   { id: "normal", label: "Normal", multiplier: 1 },
@@ -213,7 +213,8 @@ export const FEE_TIERS = [
 ];
 
 /**
- * Network fee (tap to set a custom one), the fee speed, and coin control - one card.
+ * UTXO Selection (coin control) in its own card above, so people notice they can pick the coins a
+ * send spends (K iOS b0f0a4e6), then the network fee (tap to set a custom one) and the fee speed.
  *   { tier, custom, editing, customText, estimating, feeText, showsCoinControl, coinSummary, editPill }
  * `editPill` (a send's review, iOS onEditFee): the fee shows with an Edit capsule (#fee-edit)
  * that opens the fee editor (send-steps.js showFeeEditor) instead of being typed here.
@@ -231,7 +232,7 @@ export function feeControlsHtml({ tier = "normal", custom = false, editing = fal
   } else {
     fee = '<span class="muted">—</span>';
   }
-  return `
+  return `${showsCoinControl ? utxoSelectionCardHtml(coinSummary) : ""}
     <div class="sk-card">
       <div class="sk-fee-row"><span>Network Fee</span>${fee}</div>
       <div class="segmented wide" role="radiogroup" aria-label="Fee">
@@ -240,10 +241,22 @@ export function feeControlsHtml({ tier = "normal", custom = false, editing = fal
       <div class="muted tiny">${editPill
         ? "If the network is busy, Fast or Priority pays a higher fee to help this confirm sooner. Edit sets a fee of your own."
         : "If the network is busy, Fast or Priority pays a higher fee to help this confirm sooner. Tap the fee amount to set a custom fee."}</div>
-      ${showsCoinControl ? `
-        <div class="sk-divider"></div>
-        <button class="sk-coin-row" id="coins"><span>Coin Control</span><span class="muted">${esc(coinSummary)} ${ICONS.chevron}</span></button>` : ""}
     </div>`;
+}
+
+// square.stack.3d.up.fill: three stacked coins seen edge-on
+const UTXO_STACK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6 21.4 7.4 12 12.2 2.6 7.4z"/><path d="M4.6 10.9 12 14.7l7.4-3.8 2 1-9.4 4.8-9.4-4.8z" opacity=".75"/><path d="M4.6 14.9 12 18.7l7.4-3.8 2 1-9.4 4.8-9.4-4.8z" opacity=".5"/></svg>';
+
+/** K iOS SendFeeControls.utxoSelectionCard: an accent disc, "UTXO Selection" with what it does,
+ *  and the current pick ("Automatic" or "3 UTXOs selected"). Opens the picker (#coins). */
+function utxoSelectionCardHtml(summary) {
+  return `
+    <button type="button" class="sk-card sk-utxo-card" id="coins">
+      <span class="sk-utxo-icon">${UTXO_STACK}</span>
+      <span class="sk-utxo-text"><span class="sk-utxo-title">UTXO Selection</span><span class="muted tiny">Choose which coins this send spends.</span></span>
+      <span class="muted sk-utxo-summary">${esc(summary)}</span>
+      <span class="muted sk-utxo-chevron">${ICONS.chevron}</span>
+    </button>`;
 }
 
 /** "Automatic" or "3 UTXOs selected". */

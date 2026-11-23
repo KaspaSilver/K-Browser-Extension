@@ -1038,7 +1038,7 @@ function restBase() {
  * Up to 200 transactions touching `address`, newest first - iOS fetchFullTransactionsResult
  * (one page of 200, retried at 0 / 0.6 / 2 / 5 s on HTTP 429 or 5xx only). Returns
  * { txs, complete }: complete is false when the page could not be fetched.
- * Each tx: { txid, time (ms), direction: "out" | "in" | null, amountSompi, feeSompi }.
+ * Each tx: { txid, time (ms), direction: "out" | "in" | null, amountSompi, feeSompi, paidTo: [{ address, sompi }] }.
  */
 /** The address's last `limit` transactions as the REST API sends them (inputs with their
  *  previous-outpoint address, outputs, block_time, transaction_id), or null when they can't be
@@ -1100,7 +1100,11 @@ function describeTransaction(tx, address) {
     const totalOut = outputs.reduce((sum, o) => sum + BigInt(o.amount || 0), 0n);
     if (totalIn >= totalOut) feeSompi = totalIn - totalOut;
   }
-  return { txid: tx.transaction_id, time: Number(tx.block_time || 0), direction, amountSompi, feeSompi };
+  // where each output went, so a history row can tell change to your own addresses apart (K iOS b0f0a4e6)
+  const paidTo = outputs
+    .filter((o) => o.script_public_key_address)
+    .map((o) => ({ address: o.script_public_key_address, sompi: BigInt(o.amount || 0) }));
+  return { txid: tx.transaction_id, time: Number(tx.block_time || 0), direction, amountSompi, feeSompi, paidTo };
 }
 
 // --- UTXO labels (iOS setSpendingUtxoLabel: per address, keyed "txid:index") -----------------
