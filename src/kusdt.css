@@ -55,6 +55,8 @@
 
 /* Manage kUSDT */
 .kusdt-total { position: relative; }
+.kusdt-open-trestly { margin-top: 2px; }
+.kusdt-open-trestly .kusdt-ic { width: 20px; height: 20px; }
 .kusdt-bridged { align-self: flex-start; margin-top: 8px; display: inline-flex; align-items: center; gap: 5px; color: var(--usdt-green); }
 .kusdt-bridged .kusdt-ic { width: 14px; height: 14px; }
 .kusdt-row-label { display: inline-flex; align-items: center; gap: 6px; }

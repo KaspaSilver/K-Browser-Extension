@@ -139,3 +139,25 @@ export function fieldSheet({
   if (!multiline) field.select();
   return { close };
 }
+
+/**
+ * The 32-byte x-only key (hex) a P2PK (Schnorr) kaspa: address carries, or null for any other
+ * kind. Bech32 body decoded by hand: the WASM Address.payload getter returns text, not bytes.
+ */
+export function xOnlyKeyFromAddress(address) {
+  const CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+  const body = String(address || "").trim().toLowerCase().replace(/^kaspa(test)?:/, "");
+  if (body.length <= 8) return null;
+  let acc = 0;
+  let bits = 0;
+  const bytes = [];
+  for (const ch of body.slice(0, -8)) { // the last 8 characters are the checksum
+    const value = CHARSET.indexOf(ch);
+    if (value < 0) return null;
+    acc = ((acc << 5) | value) & 0xffff;
+    bits += 5;
+    if (bits >= 8) { bits -= 8; bytes.push((acc >> bits) & 0xff); }
+  }
+  if (bytes[0] !== 0x00 || bytes.length !== 33) return null;
+  return bytes.slice(1).map((b) => b.toString(16).padStart(2, "0")).join("");
+}

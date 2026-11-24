@@ -19,7 +19,7 @@
 // per wallet. Left out: the per-account receive notifications toggle (the extension has none).
 
 import { netKey } from "./net.js";
-import { ownsAnyName, xOnlyKeyFromAddress } from "./names.js";
+import { ownsAnyName } from "./names.js";
 import "./cold.css";
 import QRCode from "qrcode";
 import * as wallet from "./wallet.js";
@@ -27,7 +27,7 @@ import * as vault from "./vault.js";
 import * as dock from "./dock.js";
 import { getLocal, setLocal, removeLocal } from "./browser.js";
 import {
-  app, esc, render, $, toast, copyText, copySecret, ICONS, navHeader, showQr, showSheet, showAlert, groupedKas8, RECEIVE_NOTES, balanceCardHtml,
+  app, esc, render, $, toast, copyText, copySecret, ICONS, navHeader, showQr, showSheet, showAlert, groupedKas8, RECEIVE_NOTES, balanceCardHtml, pageCycleHtml,
 } from "./ui.js";
 import { scanQr } from "./camera.js";
 import { kachatWordmark } from "./market.js";
@@ -37,7 +37,7 @@ import { kachatRegistry } from "./kachat-names.js";
 import { showAddToPortfolio } from "./portfolio.js";
 import { showColdSend } from "./cold-send.js";
 import { unreadableBalanceHtml, addressOptionsButtonHtml, showAddressActions, showPublicKey, fiatTextFor, addressActionsFabHtml } from "./manage.js";
-import { SF, txDate, feeText, portfolioKas, middle, shortAddress, fieldSheet } from "./cold-common.js";
+import { SF, txDate, feeText, portfolioKas, middle, shortAddress, fieldSheet, xOnlyKeyFromAddress } from "./cold-common.js";
 
 const INVALID_KPUB = "That doesn't look like a valid Kaspa extended public key (kpub).";
 
@@ -144,7 +144,7 @@ function displayLabel(entry) {
 // --- per-address knowledge shared by the account screen and the checklist -------------------
 
 const balanceCache = new Map(); // address -> sompi, last known
-const domainOwners = new Map(); // address -> owns a KNS domain
+const domainOwners = new Map(); // address -> holds a .kachat name
 const usedState = new Map();    // address -> true | false | "unknown" (probe failed)
 
 /** iOS getAddressList: 0...maxAddressIndex with live balances (batched), labels and hidden. A
@@ -185,20 +185,12 @@ async function keepKnownBalances(addresses) {
   } catch { /* the next read saves it */ }
 }
 
-async function ownsDomain(address) {
-  if (domainOwners.has(address)) return domainOwners.get(address);
-  try {
-    const data = await wallet.domains(address);
-    domainOwners.set(address, data.domains.length > 0);
-    return data.domains.length > 0;
-  } catch {
-    return false;
-  }
-}
-
-// Discovery asks every name service (iOS 7a5b157: ownsAnyName), not only KNS.
-function ownsAnyNameAt(address) {
-  return ownsAnyName(address, ownsDomain);
+// Discovery asks for a .kachat name (K iOS 518fdc8c: .kachat is the only name service).
+async function ownsAnyNameAt(address) {
+  if (domainOwners.get(address)) return true;
+  const owns = await ownsAnyName(address).catch(() => false);
+  if (owns) domainOwners.set(address, true);
+  return owns;
 }
 
 /** Has it ever been used? true / false, or null when the probe failed (iOS spendingAddressUsedState). */
@@ -264,15 +256,15 @@ async function generateAddress(accountId) {
 /**
  * iOS discoverAddresses: the first thousand addresses whatever the gaps. POST /addresses/active
  * says which were ever touched; only those are asked for balances, and the unfunded ones under
- * #200 for a KNS domain. A match holds a balance or a domain. Without /addresses/active it falls
- * back to the batched sweep (100 a batch, KNS under #200, past #1000 it stops after 60 misses).
+ * #200 for a .kachat name. A match holds a balance or a username. Without /addresses/active it falls
+ * back to the batched sweep (100 a batch, names under #200, past #1000 it stops after 60 misses).
  * Returns how many matched.
  */
 async function discoverAddresses(accountId, onProgress) {
   const DEPTH = 1000;
   const MAX_INDEX = 5000;
   const BATCH = 100;
-  const KNS_DEPTH = 200;
+  const NAME_DEPTH = 200;
   const GAP = 60;
   const account = await getAccount(accountId);
   if (!account) return 0;
@@ -294,12 +286,12 @@ async function discoverAddresses(accountId, onProgress) {
           balanceCache.set(address, sompi);
           if (sompi > 0n) funded.add(address);
         }
-      } catch { /* a balance we cannot read is not an empty one; KNS still decides below */ }
+      } catch { /* a balance we cannot read is not an empty one; the name check still decides below */ }
     }
     onProgress({ checkingIndex: touched.length ? touched[touched.length - 1].index : 0, foundCount: funded.size });
     const owners = new Set();
     await Promise.all(touched
-      .filter((t) => t.index < KNS_DEPTH && !funded.has(t.address))
+      .filter((t) => t.index < NAME_DEPTH && !funded.has(t.address))
       .map(async (t) => { if (await ownsAnyNameAt(t.address)) owners.add(t.address); }));
     for (const t of touched) {
       if (funded.has(t.address) || owners.has(t.address)) {
@@ -323,7 +315,7 @@ async function discoverAddresses(accountId, onProgress) {
         const address = derived[i];
         const at = index + i;
         balanceCache.set(address, balances[address] ?? 0n);
-        const matches = (balances[address] ?? 0n) > 0n || (at < KNS_DEPTH && await ownsAnyNameAt(address));
+        const matches = (balances[address] ?? 0n) > 0n || (at < NAME_DEPTH && await ownsAnyNameAt(address));
         if (matches) {
           lastMatch = at;
           matchCount += 1;
@@ -626,18 +618,9 @@ function showAccount({ accountId, onBack }) {
     await Promise.all(Array.from({ length: 4 }, worker));
   }
 
-  // "Contains domain" tags, after the rows are up (KNS, four at a time, cached).
+  // "Contains username" tags (.kachat names), after the rows are up (K iOS 518fdc8c).
   async function fillDomains(token) {
-    const queue = state.entries.filter((e) => !e.hidden && !domainOwners.has(e.address));
     let changed = false;
-    const worker = async () => {
-      for (let entry = queue.shift(); entry; entry = queue.shift()) {
-        if (token !== state.loadToken) return;
-        if (await ownsDomain(entry.address)) changed = true;
-      }
-    };
-    await Promise.all(Array.from({ length: 4 }, worker));
-    // .kachat names count too, where the registry is live (iOS 881ada6 ownersOfNames).
     try {
       const owners = await kachatRegistry()?.ownersOfNames(state.entries.filter((e) => !e.hidden).map((e) => e.address));
       for (const address of owners || []) {
@@ -695,7 +678,7 @@ function showAccount({ accountId, onBack }) {
     const discovering = Boolean(state.discovery);
     return [
       { label: "Generate More Addresses", subtitle: "Reveals the next unused address in this account.", icon: SF.plusCircle, busy: state.busy === "generate", disabled: discovering, onClick: generate },
-      { label: "Discover Addresses", subtitle: "Finds addresses holding a balance or a domain.", icon: SF.magnifier, disabled: discovering, keepOpen: true, onClick: discover },
+      { label: "Discover Addresses", subtitle: "Finds addresses holding a balance or a username.", icon: SF.magnifier, disabled: discovering, keepOpen: true, onClick: discover },
       { label: "Address Visibility", subtitle: "Check off every address you want on the list, in one sitting.", icon: SF.checklist, disabled: discovering, onClick: () => showVisibility({ accountId, onDone: back }) },
       // the kpub is never on screen (K iOS b0f0a4e6): it reveals every address, so it is only copied
       { label: "Copy kpub", subtitle: "Puts this account's kpub on the clipboard. It reveals all its addresses.", icon: SF.doc, disabled: discovering, onClick: () => copyKpub(state.account.kpub) },
@@ -754,7 +737,7 @@ function showAccount({ accountId, onBack }) {
     let message;
     try {
       const found = await discoverAddresses(accountId, (progress) => { state.discovery = progress; refreshActions(); });
-      message = found ? `Found ${found} address${found === 1 ? "" : "es"} with a balance or domain.` : "No addresses with a balance or domain found.";
+      message = !found ? "No addresses with a balance or username found." : found === 1 ? "Found 1 address with a balance or username." : `Found ${found} addresses with a balance or username.`;
     } catch (error) {
       message = error.message;
     }
@@ -838,7 +821,7 @@ function showAccount({ accountId, onBack }) {
                 ${entry.balanceSompi == null
                   ? '<span class="muted small cold-row-amount">Couldn\'t load the coins at this address</span>'
                   : `<span class="strong cold-row-amount">${esc(groupedKas8(entry.balanceSompi))} KAS</span>`}
-                <span class="address-status">${usedBadge(entry)}${domainOwners.get(entry.address) ? '<span class="domain-tag">Contains domain</span>' : ""}</span>
+                <span class="address-status">${usedBadge(entry)}${domainOwners.get(entry.address) ? '<span class="domain-tag">Contains username</span>' : ""}</span>
               </div>
               <button class="icon plain card-menu" data-menu="${entry.index}" aria-label="Address actions">${SF.ellipsisV}</button>
             </div>`).join("")}
@@ -1110,7 +1093,7 @@ function showAddress({ accountId, entry, onBack }) {
 
   // This KasSigner address's own .kachat names (iOS 881ada6) - read-only on the detail screen.
   let kachatTab = null;
-  // the Domains tab: a card per name service with this address's count (iOS fe52376)
+  // the Usernames page: the .kachat names this address holds (K iOS 518fdc8c)
   const kachatHtml = () => {
     kachatTab = addressDomainsTab({ address, repaint: repaintIfHere });
     return kachatTab.html;
@@ -1121,7 +1104,6 @@ function showAddress({ accountId, entry, onBack }) {
     // its coins couldn't be read: no balance and no Send (KaPay iOS 0799cec)
     const unreadable = total == null && Boolean(state.coinsError) && !state.coinsLoading;
     const scroll = app.querySelector(".manage-scroll")?.scrollTop || 0;
-    const tabs = [["history", "History"], ["utxos", "UTXOs"], ["domains", "Domains"]];
     render(`
       <header class="navbar">
         <button class="nav-back" id="back" aria-label="Back">${ICONS.back}<span>Back</span></button>
@@ -1129,9 +1111,7 @@ function showAddress({ accountId, entry, onBack }) {
         ${addressOptionsButtonHtml()}
       </header>
       ${unreadable ? unreadableBalanceHtml("cold-address-balance") : balanceCardHtml({ label: title, sompi: total, fiatText: fiatTextFor(total, repaintIfHere) })}
-      <div class="underline-tabs cold-tabs" role="tablist">
-        ${tabs.map(([id, label]) => `<button role="tab" data-tab="${id}" aria-selected="${state.tab === id}">${esc(label)}</button>`).join("")}
-      </div>
+      ${pageCycleHtml([["history", "History"], ["utxos", "UTXOs"], ["domains", "Usernames"]], state.tab, { className: "cold-tabs" })}
       <div class="manage-scroll cold-address-scroll">
         ${state.tab === "history" ? historyHtml() : state.tab === "utxos" ? utxosHtml() : kachatHtml()}
       </div>

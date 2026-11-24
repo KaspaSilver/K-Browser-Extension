@@ -40,7 +40,6 @@ import { IS_TESTNET, TESTNET_REST, switchNetwork } from "./net.js";
 import { shownAccount, shownActiveAccount } from "./account-scope.js";
 
 const BOOK_KEY = IS_TESTNET ? "nodeBookTestnet" : "nodeBook";
-import { NAME_SERVICES } from "./names.js";
 
 // iOS AppCurrency, same order and codes (the code is CoinGecko's vs_currency).
 export const CURRENCIES = [
@@ -590,7 +589,7 @@ async function showConnectionSection({ onBack }) {
           ${draft.nodeError ? `<div class="form-row error-text small">${esc(draft.nodeError)}</div>` : ""}
           ${pinned ? '<div class="form-row"><span class="accent small">Connected only to this node</span></div>' : ""}
         </div>
-        <div class="form-footer">Default finds a public Kaspa node for you and comes back to the last one that answered. Choosing a specific node connects only to it, without falling back to others. Doesn't affect the domains or explorer on the other tabs. Add custom addresses to the IP Address Book below to select them here.</div>
+        <div class="form-footer">Default finds a public Kaspa node for you and comes back to the last one that answered. Choosing a specific node connects only to it, without falling back to others. Doesn't affect the usernames or explorer on the other tabs. Add custom addresses to the IP Address Book below to select them here.</div>
       </div>
 
       <div class="form-section">
@@ -650,21 +649,9 @@ async function showConnectionSection({ onBack }) {
         </div>
         <div class="form-row between"><span>Reading names from</span><span id="kachat-source">${kachatSourceHtml()}</span></div>
       </div>
-      <div class="form-footer">Resolved first, everywhere you can type an address. Leave the indexer blank for ${indexerDefault ? "KaChat's own" : "none (Testnet has no default indexer)"}, or enter one you run yourself. If it can't be reached, serves a different registry or falls behind the network, names are read straight from the chain instead, which is slower. Buying, selling and claiming always re-check the chain.</div>
+      <div class="form-footer">Usernames are looked up here everywhere you can type an address. Leave the indexer blank for ${indexerDefault ? "KaChat's own" : "none (Testnet has no default indexer)"}, or enter one you run yourself. If it can't be reached, serves a different registry or falls behind the network, names are read straight from the chain instead, which is slower. Buying, selling and claiming always re-check the chain.</div>
     </div>
-    <div class="form-section">
-      <div class="form-header">Kaspa Name Service</div>
-      <div class="form-card"><div class="form-row stack-tight"><span class="muted small">KNS API URL</span><span class="mono small muted break">${esc(wallet.knsApiUrl())}</span></div></div>
-      <div class="form-footer">KNS domain resolution service</div>
-    </div>
-    <div class="form-section">
-      <div class="form-header">Other Name Services</div>
-      <div class="form-card">
-        ${NAME_SERVICES.filter((n) => n.tld === "k" || n.tld === "kaspa").map((n) => `
-          <div class="form-row stack-tight"><span class="muted small">${esc(n.serviceName)} (${esc(n.suffix)})</span>${n.api ? `<span class="mono small muted break">${esc(n.api)}</span>` : '<span class="muted">Not available on this network</span>'}</div>`).join("")}
-      </div>
-      <div class="form-footer">Used to show the .k and .kaspa names an address owns.</div>
-    </div>`;
+`;
 
   const explorerTab = () => `
     <div class="form-section">

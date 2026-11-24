@@ -13,7 +13,7 @@
 // only from an ID on its KAPAY_EXTENSION_IDS list (KaChat-Desktop Build 261). Until this ID is
 // listed, or when the server has no key, Swap says "Swap is not available right now".
 
-import { esc, toast, showSheet, showAlert, ICONS } from "./ui.js";
+import { esc, toast, showSheet, showAlert, ICONS, pageCycleHtml } from "./ui.js";
 import { openPanel } from "./kachat-ui.js";
 import { ext } from "./browser.js";
 import * as wallet from "./wallet.js";
@@ -24,7 +24,7 @@ import {
   sameCoin, formatQuotedAmount, createChangeNowClient, createSwapQuoter, rateLine, portfolioPrefill,
   swapSourceTxId,
 } from "../shared/ui/swap-quote.js";
-import { extraIdName, checkPayoutExtraId, withPayoutExtraId, payoutExtraIdKept } from "./swap-extra-id.js";
+import { extraIdName, checkPayoutExtraId, withPayoutExtraId, payoutExtraIdKept, swapAnswerMatches } from "./swap-extra-id.js";
 
 const RELAY_ORIGIN = "https://desktop.kachat.app";
 const RELAY_ROOT = `${RELAY_ORIGIN}/nc-proxy/`;
@@ -142,6 +142,9 @@ export async function showSwap() {
       paintForm();
     }, 500);
   };
+  /** The created exchange's deposit card goes once the coin or direction changes: it belongs to
+   *  the exchange made (K iOS clearCreatedSwap, audit 2026-11-24 #2). */
+  const clearCreated = () => { if (state.create.status !== "creating") state.create = { status: "idle", result: null }; };
   const clearQuoted = () => { if (state.editedSide === "send") state.receiveAmountText = ""; else state.amountText = ""; };
 
   // --- create / status (iOS executeSwap, refreshSwapStatusAsync) ---
@@ -191,6 +194,14 @@ export async function showSwap() {
         paintForm();
         return;
       }
+      // ChangeNOW's answer must be the exchange asked for: its payout address, both coins and the
+      // amount; otherwise its deposit address isn't shown (K iOS 518fdc8c, audit 2026-11-24 #6)
+      if (!swapAnswerMatches(response, { from, to, amount: amountStr, payoutAddress: address })) {
+        state.create = { status: "failed", result: null };
+        toast("ChangeNOW's answer doesn't match this swap, so K didn't show its deposit address. Nothing was sent.");
+        paintForm();
+        return;
+      }
       // a payout to an exchange account without its tag can't be credited: no deposit address unless
       // ChangeNOW kept it
       if (!payoutExtraIdKept(payoutExtra.value, response)) {
@@ -210,7 +221,12 @@ export async function showSwap() {
         status: response.status || "new", createdAt: Date.now(), addedToPortfolio: false,
       });
       saveHistory();
-      state.create = { status: "success", result: { ...response, payinExtraId, payinExtraIdName } };
+      // the deposit card is the exchange made - its coins, amount and payout - not the coins picked
+      // later (K iOS 518fdc8c, audit 2026-11-24 #2)
+      state.create = {
+        status: "success",
+        result: { ...response, payinExtraId, payinExtraIdName, fromCoin: from, toCoin: to, fromAmount: amountStr, payoutAddress: address },
+      };
       state.payoutExtraText = "";
       state.amountText = ""; state.receiveAmountText = ""; state.editedSide = "send";
       state.estimate = { status: "idle" };
@@ -260,10 +276,12 @@ export async function showSwap() {
       <span class="muted tiny">ChangeNOW's deposit address is shared. Send without this ${esc(name)} and the deposit can't be credited to your swap.</span>` : "");
   const resultCard = (r) => `
     <div class="sk-card swap-result">
-      <div class="strong">Send ${esc(fromCoin().displayName)} to this address</div>
+      <div class="strong">Send ${esc(r.fromAmount)} ${esc(r.fromCoin.displayName)} to this address</div>
       <button class="swap-qr-button" data-swap-copy="${esc(r.payinAddress)}" aria-label="Copy deposit address"><canvas class="swap-qr" data-swap-qr="${esc(r.payinAddress)}" width="180" height="180"></canvas></button>
       <button class="mono tiny swap-mono" data-swap-copy="${esc(r.payinAddress)}">${esc(r.payinAddress)}</button>
       ${payinExtraHtml(r.payinExtraIdName || "Extra ID", r.payinExtraId)}
+      <span class="muted tiny">Receiving ${esc(r.toCoin.displayName)} at</span>
+      <span class="mono tiny swap-mono">${esc(r.payoutAddress)}</span>
       <span class="muted tiny">Status: ${esc(r.status || "new")}</span>
       <span class="muted tiny">ChangeNOW Exchange ID</span>
       <button class="mono tiny swap-mono" data-swap-copy-id="${esc(r.id)}">${esc(r.id)}</button>
@@ -330,10 +348,7 @@ export async function showSwap() {
     }
     if (!state.agreed) return disclaimerHtml();
     return `
-      <div class="underline-tabs" role="tablist">
-        <button role="tab" data-swap-tab="swap" aria-selected="${state.tab === "swap"}">Swap</button>
-        <button role="tab" data-swap-tab="history" aria-selected="${state.tab === "history"}">Swap History</button>
-      </div>
+      ${pageCycleHtml([["swap", "Swap"], ["history", "Swap History"]], state.tab, { attr: "data-swap-tab" })}
       <div data-swap-page class="swap-page">${state.tab === "swap" ? formHtml() : historyHtml()}</div>`;
   }
 
@@ -400,7 +415,7 @@ export async function showSwap() {
           const picked = CURATED_COINS.find((c) => c.ticker === ticker && c.network === network);
           sheet.close();
           // a tag typed for one coin is never sent with another
-          if (picked) { state.otherCoin = picked; state.payoutExtraText = ""; clearQuoted(); reschedule(); }
+          if (picked) { state.otherCoin = picked; state.payoutExtraText = ""; clearCreated(); clearQuoted(); reschedule(); }
         };
       }
     };
@@ -534,7 +549,7 @@ export async function showSwap() {
     if (t.closest("[data-swap-not-now]")) { handle.close(); return; }
     const tabButton = t.closest("[data-swap-tab]");
     if (tabButton) { state.tab = tabButton.dataset.swapTab; paint(); return; }
-    if (t.closest("[data-swap-flip]")) { state.kasIsSendSide = !state.kasIsSendSide; state.payoutExtraText = ""; clearQuoted(); reschedule(); return; }
+    if (t.closest("[data-swap-flip]")) { state.kasIsSendSide = !state.kasIsSendSide; state.payoutExtraText = ""; clearCreated(); clearQuoted(); reschedule(); return; }
     if (t.closest("[data-swap-create]")) { execute(); return; }
     if (t.closest("[data-swap-pick]")) { openCoinPicker(); return; }
     if (t.closest("[data-swap-change-address]")) { openAddressPicker(); return; }

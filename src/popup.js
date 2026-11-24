@@ -14,7 +14,6 @@ import { showSend } from "./send.js";
 import { showRequestPayment } from "./request-payment.js";
 import { loadOwnAddresses } from "./own-addresses.js";
 import { showManageAddress, showManageAddresses, openSpendingAddress } from "./manage.js";
-import { cachedOwnedNames, ownedNames, otherNamesCount } from "./names.js";
 import { showWelcome, showUnlock, enterApp, setHandlers, setLoggedOut, deleteAccount, clearImportDraft, isLoggedOut, LOGGED_OUT_KEY } from "./onboarding.js";
 import { showDomains } from "./domains.js";
 import { showKachatMarket } from "./market.js";
@@ -44,7 +43,7 @@ import { NETWORK, NETWORK_MIRROR_KEY, IS_TESTNET, syncNetworkMirror } from "./ne
 import { showColdStorage, coldWatchAddresses } from "./cold.js";
 import { showPortfolio } from "./portfolio.js";
 import { showCameraPermissionPage } from "./camera.js";
-import { startKusdt, kusdtCardHtml, watchKusdtCard, openWalletSend, openSwapStablecoins, openManageKusdt } from "./kusdt-screens.js";
+import { startKusdt, kusdtCardHtml, watchKusdtCard, openWalletSend, openManageKusdt } from "./kusdt-screens.js";
 import { kusdt } from "./kusdt.js";
 import { logWarn } from "./log.js";
 
@@ -174,13 +173,13 @@ async function followAccountSwitch() {
 // toolbar (connection dot, the whole hot wallet's balance in the middle, the bell, then expand and
 // lock), the backup banner while it's owed and the pinned "Wallet" title; then the total balance
 // split into chatting and spending (WalletBalanceCard), Send, Receive and Request, Backup Hygiene
-// when it's due, the Manage Addresses and Chatting Address squares, Your Domains and Contacts. No
+// when it's due, the Manage Addresses and Chatting Address squares, Your Usernames and Contacts. No
 // profile card, share button or floating arrows: a profile belongs to KaChat and KaPost. About and
 // the account's name are in Settings. Help is left out: its only guide is the .kachat names guide.
-// Swap (ChangeNOW, KaChat-Desktop Build 217) has no place in KaPay iOS; it stays here, a fourth
-// button beside Request, so it is still reachable.
+// Swap (ChangeNOW, KaChat-Desktop Build 217) is the fourth button beside Request, as K iOS 5.4 has
+// it again (518fdc8c).
 //
-// Your Domains counts .kachat, .kas, .k and .kaspa names together.
+// Your Usernames counts the account's .kachat names (K iOS 518fdc8c: the only name service).
 
 let homeState = null;
 
@@ -218,8 +217,6 @@ async function showHome() {
     addresses: cached,
     spending,
     balances: knownBalances?.total != null ? knownBalances : null,
-    kns: cached?.main ? wallet.cachedKns(cached.main) : null,
-    otherNames: cached?.main ? cachedOwnedNames(cached.main) : null,
     // the saved .kachat list's count at once; the registry read corrects it (iOS f4f5c0f)
     kachatCount: kachatLive && cached?.main ? cachedOwnedCount(cached.main) ?? 0 : 0,
     price: wallet.cachedPrice(currency),
@@ -286,7 +283,7 @@ function graceBannerHtml(s) {
     <div class="grace-banner" id="grace-banner" role="button" tabindex="0">
       <span class="grace-icon">${ICONS.warning}</span>
       <span class="grace-text">
-        <span class="strong small">${one ? "One of your .kachat domains expired" : `${grace.length} of your .kachat domains expired`}</span>
+        <span class="strong small">${one ? "One of your usernames expired" : `${grace.length} of your usernames expired`}</span>
         <span class="muted tiny">${esc(one ? `Renew ${grace[0].info.name}.kachat before its grace period ends on ${ends} to keep it.` : "Renew them before their grace periods end to keep them.")}</span>
       </span>
       <button class="icon plain" id="grace-dismiss" aria-label="Dismiss">${ICONS.xCircle}</button>
@@ -296,11 +293,11 @@ function graceBannerHtml(s) {
 function bindGraceBanner(s) {
   const banner = $("#grace-banner");
   if (!banner) return;
-  // one name opens it; several open Your Domains' .kachat list
+  // one name opens it; several open Your Usernames
   banner.onclick = () => {
     const grace = s.graceNames || [];
     if (grace.length === 1) showLiveNameDetail({ info: grace[0].info, onBack: showHome });
-    else if (s.addresses?.main) showDomains({ address: s.addresses.main, onBack: showHome, service: "kachat" });
+    else if (s.addresses?.main) showDomains({ address: s.addresses.main, onBack: showHome });
   };
   $("#grace-dismiss").onclick = (event) => {
     event.stopPropagation();
@@ -313,10 +310,8 @@ function paintHome() {
   const s = homeState;
   if (!s) return;
   const main = s.addresses?.main || null;
-  const kns = s.kns || {};
-  // Every name the account owns: .kachat (iOS 10e4a1a - 0 where the registry isn't launched), KNS,
-  // .k and .kaspa.
-  const domainCount = kns.known ? (s.kachatCount || 0) + kns.domainCount + otherNamesCount(s.otherNames) : null;
+  // The account's .kachat names (iOS 10e4a1a - 0 where the registry isn't launched).
+  const domainCount = s.kachatCount || 0;
   // Both parts or a dash: a total missing one of them would read as the whole balance (iOS
   // HotWalletBalance). The total counts hidden addresses too, Cold Storage not.
   const totalSompi = s.balances?.total ?? null;
@@ -375,14 +370,14 @@ function paintHome() {
         ${IS_TESTNET && main ? faucetCardHtml(main) : ""}
         <!-- Which address a send comes from is picked on the send screen (From), so this tab
              doesn't split Main from Spending or have a "primary". -->
-        <!-- Chatting Address, Your Domains, Contacts as rows; Manage Addresses is the balance card
+        <!-- Chatting Address, Your Usernames, Contacts as rows; Manage Addresses is the balance card
              (KaPay iOS 3d126db) -->
         <button class="glass nav-row" id="chatting-qr" ${main ? "" : "disabled"}>
           <span class="nav-row-label">${ICONS.qr}<span>Chatting Address</span></span>${ICONS.chevron}
         </button>
         <button class="glass nav-row" id="domains">
-          <span class="nav-row-label">${ICONS.at}<span>Your Domains</span></span>
-          <span class="nav-row-value">${domainCount != null ? esc(String(domainCount)) : ""}</span>${ICONS.chevron}
+          <span class="nav-row-label">${ICONS.at}<span>Your Usernames</span></span>
+          <span class="nav-row-value">${domainCount ? esc(String(domainCount)) : ""}</span>${ICONS.chevron}
         </button>
         <button class="glass nav-row" id="address-book">
           <span class="nav-row-label">${addressBook.CONTACTS_ICON}<span>Contacts</span></span>${ICONS.chevron}
@@ -412,7 +407,10 @@ function paintHome() {
   $("#request").onclick = () => showRequestPayment();
   // Swap Stablecoins (K iOS, K-Desktop): kUSDT on Trestly's site; ChangeNOW Swap (KaChat-Desktop
   // Build 217) for other coins stays under it
-  $("#swap").onclick = () => openSwapStablecoins({ onOtherCoins: () => import("./swaps.js").then((m) => m.showSwap()) });
+  // Swap (K iOS 518fdc8c, owner 2026-11-23: it replaced Swap Stablecoins): the swap screen itself.
+  // K iOS also swaps KAS and kUSDT there through Trestly's pool; that waits for K-Desktop's engine,
+  // so here kUSDT is reached from Manage kUSDT's Open Trestly and Send kUSDT's Swap Stablecoins.
+  $("#swap").onclick = () => import("./swaps.js").then((m) => m.showSwap());
   $("#kusdt-card").onclick = openKusdtManage;
   for (const pill of document.querySelectorAll("[data-card-pill]")) pill.onclick = () => setWalletCardPage(Number(pill.dataset.cardPill));
   // a finger drags the cards (iOS SlidingCardPager); a mouse uses the pills
@@ -434,7 +432,7 @@ function paintHome() {
     onChangeIdentity: s.account.imported ? () => { homeState = null; showHome(); } : null,
   });
   $("#address-book").onclick = () => addressBook.showAddressBook({ onBack: showHome });
-  $("#domains").onclick = () => { if (main) showDomains({ address: main, onBack: showHome, atCards: true }); };
+  $("#domains").onclick = () => { if (main) showDomains({ address: main, onBack: showHome }); };
   // Claim Testnet Kaspa (testnet only): the faucet opens in a tab; a wallet open in its own tab
   // watches the chatting balance for a minute, the popup checks it next time it opens.
   const faucet = $("#faucet");
@@ -631,19 +629,11 @@ async function refreshHome() {
       s.addresses = derived;
       bell.useAccount(s.addresses.main);
       addressBook.useWallet(s.addresses.main);
-      s.kns = wallet.cachedKns(s.addresses.main);
-      s.otherNames = cachedOwnedNames(s.addresses.main);
       if (kachatLive && !s.kachatCount) s.kachatCount = cachedOwnedCount(s.addresses.main) ?? 0;
       // the backup banner, Complete Your Backup and the delete warning at once, offline too - not
       // only once the balances load
       noteBackupContext(s);
       paintHomeIfShowing(s);
-    }
-    wallet.kns(s.addresses.main).then((info) => { s.kns = info; paintHomeIfShowing(s); }).catch(() => {});
-    // .k / .kaspa names change rarely; the 30 s balance refresh asks for them every 5 minutes.
-    if (!s.otherNamesAt || Date.now() - s.otherNamesAt > 5 * 60_000) {
-      s.otherNamesAt = Date.now();
-      ownedNames(s.addresses.main).then((owned) => { s.otherNames = owned; paintHomeIfShowing(s); }).catch(() => {});
     }
     try {
       await wallet.connection();
@@ -658,7 +648,7 @@ async function refreshHome() {
         kachatNames()
           .then(async (rt) => {
             if (stale()) return;
-            // The .kachat names for the Your Domains count: the set its .kachat tab lists - active
+            // The .kachat names for the Your Usernames count: the set its .kachat tab lists - active
             // names and expired ones in grace, never lapsed ones (iOS aa36d2a heldNames).
             const key = KachatNamesRegistry.keyOf(main.toLowerCase());
             const countHeld = async () => {
@@ -693,7 +683,8 @@ async function refreshHome() {
       wallet.runPendingDiscovery(s.account.id);
       // the Wallet tab's scan for balances on addresses not listed yet (K iOS scanAndRefresh)
       startAddressScan(s);
-      // a .kas commit whose reveal never went out (KaPay iOS 2da5f4b)
+      // a .kas commit whose reveal never went out (KaPay iOS 2da5f4b; kept past .kachat only, K iOS
+      // 518fdc8c KNSRevealRecovery)
       wallet.resumeDomainReveals();
       // "Your own address" on every To field, KasSigner's send included (iOS 56f004f)
       loadOwnAddresses();

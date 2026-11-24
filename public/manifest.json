@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "K Extension",
   "short_name": "K",
-  "version": "5.3",
+  "version": "5.4",
   "description": "K, the Kaspa wallet: send and receive KAS, manage addresses and domains, and connect to Kaspa websites.",
   "icons": {
     "16": "icons/k-16.png",
@@ -58,14 +58,11 @@
   ],
   "host_permissions": [
     "https://api.kaspa.org/*",
-    "https://api-tn10.dotk.name/*",
     "https://api-tn10.kaspa.org/*",
     "https://api.knsdomains.org/*",
     "https://api.coingecko.com/*",
     "https://query1.finance.yahoo.com/*",
     "https://api.gateio.ws/*",
-    "https://kaspaname.com/*",
-    "https://api.dotk.name/*",
     "https://*.kaspa.green/*",
     "https://*.kaspa.red/*",
     "https://*.kaspa.stream/*",

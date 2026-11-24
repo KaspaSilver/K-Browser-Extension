@@ -31,7 +31,6 @@
 import QRCode from "qrcode";
 import * as wallet from "./wallet.js";
 import { app, esc, toast, settings, unitText } from "./ui.js";
-import { otherDomainsHtml, bindOtherDomains, splitTypedName } from "./names.js";
 import { scanQr } from "./camera.js";
 import { showCoinControl, heldCoinReason } from "./send.js";
 import { loadOwnAddresses } from "./own-addresses.js";
@@ -75,8 +74,6 @@ export function showColdSend(opts) {
     recipient: compound ? { address: from, domain: null, tld: null } : null, // { address, domain, tld }
     recipientError: "",
     resolving: false,
-    resolutions: [],
-    othersOpen: false,
     amountText: "",
     maxMode: false,
     estimatingMax: false,
@@ -210,10 +207,7 @@ export function showColdSend(opts) {
     onChange: (found) => {
       s.recipient = found.recipient;
       s.recipientError = found.error;
-      s.resolutions = found.resolutions;
       s.resolving = found.resolving;
-      // Nothing for the ending typed, but another service has the name: show it straight away.
-      s.othersOpen = Boolean(found.error) && found.resolutions.some((r) => r.address);
       paint();
     },
   });
@@ -224,9 +218,6 @@ export function showColdSend(opts) {
     resolvedName: s.recipient?.domain || null,
     valid: Boolean(s.recipient && !s.recipient.domain),
   });
-  const otherDomains = () => (s.resolutions.length
-    ? otherDomainsHtml({ resolutions: s.resolutions, selectedTld: s.recipient?.tld || splitTypedName(s.toInput).tld, open: s.othersOpen })
-    : "");
   /** A recipient from Paste, Scan QR or Contacts: into the field, looked up at once. */
   const setRecipientText = (text) => {
     s.toInput = text;
@@ -241,7 +232,7 @@ export function showColdSend(opts) {
       screen: "cold-send-to",
       title: screenTitle,
       question: "Who are you sending to?",
-      bodyHtml: recipientCardHtml({ input: s.toInput, status: recipientStatus(), extraHtml: otherDomains() }),
+      bodyHtml: recipientCardHtml({ input: s.toInput, status: recipientStatus() }),
       onCancel: cancel,
       canContinue: hasValidRecipient,
       onContinue: () => go("amount"),
@@ -278,22 +269,11 @@ export function showColdSend(opts) {
     try { input.setSelectionRange(input.value.length, input.value.length); } catch { /* fine */ }
   };
   const bindRecipientExtras = () => {
-    bindOtherDomains(handle.el, {
-      onToggle: () => { s.othersOpen = !s.othersOpen; paintRecipient(); },
-      onPick: (tld) => {
-        const pick = s.resolutions.find((r) => r.tld === tld && r.address);
-        if (!pick) return;
-        s.recipient = { address: pick.address, domain: pick.display, tld: pick.tld };
-        s.recipientError = "";
-        s.othersOpen = false;
-        paintRecipient();
-      },
-    });
   };
   const paintRecipient = () => {
     const status = handle.el.querySelector("#recipient-status");
     if (!status) return;
-    status.innerHTML = unitText(recipientStatusHtml({ input: s.toInput, status: recipientStatus(), extraHtml: otherDomains() }));
+    status.innerHTML = unitText(recipientStatusHtml({ input: s.toInput, status: recipientStatus() }));
     bindRecipientExtras();
     handle.refresh();
   };

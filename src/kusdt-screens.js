@@ -45,7 +45,6 @@ import {
   applyKeypadKey, reviewRowHtml, showSwipeUp, SWIPE_UP_LABELS,
 } from "./send-steps.js";
 import { recipientCardHtml, recipientStatusHtml, recipientLookup, bindAddressBookButton } from "./send-pieces.js";
-import { otherDomainsHtml, bindOtherDomains, splitTypedName } from "./names.js";
 import { scanQr } from "./camera.js";
 import { entryFor, entryName } from "./address-book.js";
 import "./kusdt.css";
@@ -78,7 +77,7 @@ export const KUSDT_TEXT = Object.freeze({
   risk: "Not independently audited yet. Hold only what you can afford to lose.",
   aboutCoin: "Every kUSDT coin holds 1.5 KAS. It goes along with the kUSDT when you send it.",
   emptyTitle: "No kUSDT Yet",
-  emptyText: "Receive it on a fresh address, or buy it with Swap Stablecoins on the Wallet tab.",
+  emptyText: "Receive it on a fresh address, or get some on Trestly with Open Trestly above.",
   historyEmpty: "No kUSDT activity yet.",
   historyEmptyNote: "Sends, receives and combines in this browser show here from now on.",
   swapRowSubtitle: "On Trestly's site, in a new tab",
@@ -168,16 +167,15 @@ export function watchKusdtCard(onChange) {
 
 // --- §2 Swap Stablecoins -----------------------------------------------------------------------
 
-/** "Which stablecoin?", then Trestly's swap page in a new tab (K-Desktop, owner 2026-11-20). The
- *  extension's ChangeNOW Swap for other coins stays under it. */
-export function openSwapStablecoins({ onOtherCoins = null } = {}) {
+/** "Which stablecoin?", then Trestly's swap page in a new tab (K-Desktop, owner 2026-11-20): Send
+ *  kUSDT's way to get some when none of your addresses holds any (K iOS TokenSendView keeps it). */
+export function openSwapStablecoins() {
   showSheet({
     title: "Swap Stablecoins",
     headerHtml: '<div class="kusdt-sheet-question">Which stablecoin?</div>',
     cancel: false,
     rows: [
       { label: SYMBOL, subtitle: KUSDT_TEXT.swapRowSubtitle, icon: kusdtCoinIconHtml(36), onClick: () => openExternal(`${kusdtDeployment(NETWORK).siteUrl}/swap`) },
-      ...(onOtherCoins ? [{ label: "Other Coins", subtitle: "Swap KAS for other coins with ChangeNOW.", icon: KUSDT_ICONS.swap, onClick: onOtherCoins }] : []),
     ],
     footerHtml: `<p class="muted small kusdt-sheet-footer">${esc(KUSDT_TEXT.swapFooter)}</p>`,
   });
@@ -213,7 +211,7 @@ export function openKusdtSend({ startFrom = null, recipient = null, recipientNam
   const w = W();
   const S = {
     owner, recipientInput: recipient || "", recipient: null, recipientName: recipientName || null, resolving: false,
-    recipientError: "", resolutions: [], othersOpen: false,
+    recipientError: "", 
     fromId: null, startFrom, amountText: "",
     prepared: null, preparing: false, prepareError: null, rebuildWhenDone: false,
     fundShort: null, fundForChange: false, fundingSent: false, awaitingFunds: false, fundingRun: 0,
@@ -264,9 +262,7 @@ export function openKusdtSend({ startFrom = null, recipient = null, recipientNam
     onChange: (found) => {
       S.recipient = found.recipient;
       S.recipientError = found.error;
-      S.resolutions = found.resolutions;
       S.resolving = found.resolving;
-      S.othersOpen = Boolean(found.error) && found.resolutions.some((r) => r.address);
       if (S.recipient && !S.recipient.domain) {
         const saved = entryFor(S.recipient.address);
         S.recipientName = recipientName && S.recipient.address.toLowerCase() === String(recipient).toLowerCase()
@@ -285,29 +281,13 @@ export function openKusdtSend({ startFrom = null, recipient = null, recipientNam
     resolvedName: S.recipient?.domain || null,
     valid: Boolean(S.recipient && !S.recipient.domain),
   });
-  const otherDomains = () => (S.resolutions.length
-    ? otherDomainsHtml({ resolutions: S.resolutions, selectedTld: S.recipient?.tld || splitTypedName(S.recipientInput).tld, open: S.othersOpen })
-    : "");
   const scriptNote = () => (isScript() ? statusLine(KUSDT_ICONS.octagonX, KUSDT_TEXT.scriptRecipient, "bad") : "");
   const paintRecipient = () => {
     const status = handle?.el?.querySelector("#recipient-status");
     if (!status) return;
-    status.innerHTML = unitText(recipientStatusHtml({ input: S.recipientInput, status: recipientStatus(), extraHtml: otherDomains() }) + scriptNote());
-    bindOthers();
+    status.innerHTML = unitText(recipientStatusHtml({ input: S.recipientInput, status: recipientStatus() }) + scriptNote());
     handle.refresh();
   };
-  const bindOthers = () => bindOtherDomains(handle.el, {
-    onToggle: () => { S.othersOpen = !S.othersOpen; paintRecipient(); },
-    onPick: (tld) => {
-      const pick = S.resolutions.find((r) => r.tld === tld && r.address);
-      if (!pick) return;
-      S.recipient = { address: pick.address, domain: pick.display, tld: pick.tld, resolutions: S.resolutions };
-      S.recipientName = pick.display;
-      S.recipientError = "";
-      S.othersOpen = false;
-      paintRecipient();
-    },
-  });
   const setRecipientText = (text) => {
     S.recipientInput = text;
     const input = handle?.el?.querySelector("#recipient");
@@ -339,7 +319,7 @@ export function openKusdtSend({ startFrom = null, recipient = null, recipientNam
   function drawTo(direction) {
     const step = showStep({
       screen: "kusdt-send-to", title, question: "Who are you sending to?",
-      bodyHtml: recipientCardHtml({ input: S.recipientInput, status: recipientStatus(), extraHtml: otherDomains() + scriptNote() }),
+      bodyHtml: recipientCardHtml({ input: S.recipientInput, status: recipientStatus(), extraHtml: scriptNote() }),
       onCancel: close,
       canContinue: () => Boolean(S.recipient) && !S.resolving && !isScript(),
       onContinue: () => go(skipsFrom() ? "amount" : "from"),
@@ -361,7 +341,6 @@ export function openKusdtSend({ startFrom = null, recipient = null, recipientNam
       if (code && here()) setRecipientText(String(code).trim().split("?")[0]);
     };
     bindAddressBookButton(step.body, (address) => setRecipientText(address));
-    bindOthers();
     input.focus();
     try { input.setSelectionRange(input.value.length, input.value.length); } catch { /* fine */ }
   }
@@ -839,6 +818,9 @@ export function openManageKusdt({ onBack }) {
           ${units != null ? `<div class="bal-card-detail">${esc(kusdtDollars(units))}</div>` : ""}
           <button type="button" class="sk-chip kusdt-bridged" id="kusdt-about">Bridged by ${esc(KUSDT_TOKEN.issuer)}${KUSDT_ICONS.info}</button>
         </div>
+        <button type="button" class="glass nav-row kusdt-open-trestly" id="kusdt-open-trestly">
+          <span class="nav-row-label"><span class="accent">${KUSDT_ICONS.safari}</span><span>Open Trestly</span></span>${ICONS.chevron}
+        </button>
         ${w.error ? statusLine(KUSDT_ICONS.warning, `Couldn't check ${SYMBOL} just now: ${w.error} Refresh to try again.`, "warn") : ""}
         ${w.refreshing ? spinnerLine(`Checking your ${SYMBOL}...`) : ""}
         ${rows.map(rowHtml).join("")}
@@ -852,6 +834,9 @@ export function openManageKusdt({ onBack }) {
     $("#back").onclick = onBack;
     $("#kusdt-refresh").onclick = async () => { await w.discover().catch(() => null); };
     $("#kusdt-about").onclick = () => openAboutKusdt({ onBack: back });
+    // Open Trestly (K iOS 518fdc8c, owner 2026-11-23): Trestly's site, for its pool and everything
+    // else there. K iOS shows it inside the app connected to one address; here it is a new tab.
+    $("#kusdt-open-trestly").onclick = () => openExternal(kusdtDeployment(NETWORK).siteUrl);
     $("#kusdt-actions").onclick = openActions;
     const hiddenNote = $("#kusdt-hidden");
     if (hiddenNote) hiddenNote.onclick = () => openVisibility({ onBack: back });
@@ -1208,7 +1193,7 @@ const GUIDE_CARDS = [
   { icon: "arrowUp", title: "Sending kUSDT", detail: "A send takes a little KAS from the same address for the network fee, plus 1.5 KAS for your change coin when you keep some kUSDT. If the address is short, Fund This Address tops it up from another of your addresses." },
   { icon: "merge", title: "Combine Coins", detail: "Each payment you receive is its own coin with its own 1.5 KAS. Combine Coins, in an address's menu, merges them into one and gives the extra KAS back." },
   // the K-Desktop wording (owner, 2026-11-20): Trestly's own site, in a new tab
-  { icon: "swap", title: "Swapping", detail: "To swap KAS and kUSDT, or add to the pool, click Swap on the Wallet tab and choose kUSDT. Trestly's own site opens in a new tab: connect a wallet there, then send what you swapped to one of your addresses here." },
+  { icon: "swap", title: "Swapping", detail: "To swap KAS and kUSDT, or add to the pool, click Open Trestly in Manage kUSDT. Trestly's own site opens in a new tab: connect a wallet there, then send what you swapped to one of your addresses here." },
   { icon: "clock", title: "History", detail: "kUSDT history is kept in this browser: sends, combines and payments received from now on. What happened before, or in another app, isn't shown." },
   { icon: "warning", title: "The Risks", detail: KUSDT_TEXT.risk, tone: "warn" },
 ];

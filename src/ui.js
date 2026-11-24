@@ -336,6 +336,34 @@ export const ICONS = {
   download: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>',
 };
 
+// arrow.triangle.2.circlepath, the cycle button's glyph
+const CYCLE_GLYPH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.5-4.6L4 8"/><path d="M4 3.5V8h4.5"/><path d="M4 13a8 8 0 0 0 14.5 4.6L20 16"/><path d="M20 20.5V16h-4.5"/></svg>';
+
+/**
+ * The switch between pages inside a screen - K iOS PageCycleBar / CycleCapsuleButton (518fdc8c;
+ * owner, 2026-11-24: it replaced the underline tabs): one see-through capsule, leading, naming the
+ * page shown, with a dot per page; each click goes to the next page (and round again). `tabs` is
+ * [[id, title]]; the button carries the NEXT page's id in `attr` (default data-tab), so a screen's
+ * handler for its old tabs works as it was.
+ */
+let lastCycleTitle = null; // the fade runs only when the page changed, not on every repaint
+export function pageCycleHtml(tabs, current, { attr = "data-tab", className = "" } = {}) {
+  const at = Math.max(0, tabs.findIndex(([id]) => id === current));
+  const [, title] = tabs[at] || ["", ""];
+  const fades = lastCycleTitle != null && lastCycleTitle !== title;
+  lastCycleTitle = title;
+  const next = tabs[(at + 1) % tabs.length]?.[0] ?? current;
+  const where = tabs.length <= 6
+    ? `<span class="cycle-dots">${tabs.map(([id]) => `<span class="cycle-dot${id === tabs[at][0] ? " on" : ""}"></span>`).join("")}</span>`
+    : `<span class="cycle-count">${at + 1}/${tabs.length}</span>`;
+  return `
+    <div class="page-cycle-bar ${className}">
+      <button type="button" class="cycle-button" ${attr}="${esc(next)}" aria-label="${esc(title)}" title="Switches to the next page">
+        ${CYCLE_GLYPH}<span class="cycle-title${fades ? " fades" : ""}">${esc(title)}</span>${where}
+      </button>
+    </div>`;
+}
+
 export function navHeader({ back = true, backLabel = "Back", title = "" } = {}) {
   return `
     <header class="navbar">
@@ -374,7 +402,7 @@ export const RECEIVE_NOTES = {
   noKusdtQuantum: { kind: "warning", text: "Don't send kUSDT here: it can't be traded from a quantum-resistant address. Use Receive for a regular one." },
   noKusdtCold: { kind: "warning", text: "Don't send kUSDT here: Cold Storage can't move it." },
   receiveUse: { kind: "info", text: "It lands in this account and shows in your spending total. Use it for everything except .kachat names." },
-  chattingUse: { kind: "info", text: "Use for chatting and acquiring .kachat domains." },
+  chattingUse: { kind: "info", text: "Use for chatting and acquiring usernames." },
 };
 
 const noteHtml = (note, cls) => `<div class="${cls} rcv-note-${note.kind}"><span class="rcv-note-icon">${NOTE_ICONS[note.kind] || NOTE_ICONS.info}</span><span>${esc(note.text)}</span></div>`;

@@ -1,12 +1,12 @@
 // Managing your addresses - a 1:1 port of the iOS screens:
 //
-//   ChattingAddressManageView   Balance, History | UTXOs | .kachat on the underline tab bar,
+//   ChattingAddressManageView   Balance, History | UTXOs | Usernames on the cycle button,
 //                               Receive / Send; the options button opens Address Actions
 //   ManageAddressesView         Total Balance, Address Actions (Generate, Discover, Address
 //                               Visibility), one card per spending address with its own actions
 //                               sheet (Rename, Copy, Show QR Code, Set as Primary, Hide)
-//   SpendingAddressTransactionHistoryView   one spending address: History | UTXOs | .kachat (iOS
-//                               5.2 dropped its KNS Domains tab: .kas names live in Your Domains),
+//   SpendingAddressTransactionHistoryView   one spending address: History | UTXOs | Usernames
+//                               (K iOS 518fdc8c: .kachat names only),
 //                               Receive / Send; the options button opens Address Actions
 //   SpendingAddressVisibilityView, the private / public key sheets, Rename UTXO, the Transaction
 //   sheet.
@@ -19,7 +19,7 @@ import * as wallet from "./wallet.js";
 import * as vault from "./vault.js";
 import {
   app, esc, render, $, toast, copyText, copySecret, ICONS, navHeader, showQr, showSheet, showAlert,
-  passwordGate, groupedKas8, RECEIVE_NOTES, balanceCardHtml, settings,
+  passwordGate, groupedKas8, RECEIVE_NOTES, balanceCardHtml, settings, pageCycleHtml,
 } from "./ui.js";
 import { IS_TESTNET } from "./net.js";
 
@@ -164,7 +164,7 @@ function shortAddress(address) {
   return value.length > 20 ? `${value.slice(0, 14)}...${value.slice(-6)}` : value;
 }
 
-// --- Transaction History, UTXOs, KNS Domains (shared by both detail screens) -----------------
+// --- Transaction History, UTXOs, Usernames (shared by both detail screens) ------------------
 
 function historyHtml(state) {
   if (!state.history && state.historyLoading) return '<div class="list-row center-row"><span class="spinner small-spin"></span></div>';
@@ -332,25 +332,20 @@ function loaders(state, address, repaintIfHere) {
   return { loadHistory, loadCoins };
 }
 
-// The Domains tab of every address screen (iOS fe52376): a card per name service with this
-// address's count; .kachat opens its cards and detail screens as before.
+// The Usernames page of every address screen (K iOS 518fdc8c): the .kachat names it holds.
 function kachatTabHtml(state) {
   state.kachatTab = addressDomainsTab({ address: state.address, repaint: state.repaint });
   return state.kachatTab.html;
 }
 
-/** After a render: the Domains tab's cards, and a name's detail coming back to this screen. */
+/** After a render: the Usernames page's names, and a name's detail coming back to this screen. */
 function bindKachatTab(state, back) {
   if (state.tab === "domains") state.kachatTab?.bind(app, back);
 }
 
-// iOS UnderlineTabBar with the plain titles History / UTXOs / Domains.
+// K iOS PageCycleBar (518fdc8c): History / UTXOs / Usernames on the cycle button.
 function addressTabsHtml(current) {
-  return `
-    <div class="underline-tabs address-tabs" role="tablist">
-      ${[["history", "History"], ["utxos", "UTXOs"], ["domains", "Domains"]].map(([id, title]) =>
-        `<button role="tab" data-tab="${id}" aria-selected="${current === id}">${title}</button>`).join("")}
-    </div>`;
+  return pageCycleHtml([["history", "History"], ["utxos", "UTXOs"], ["domains", "Usernames"]], current, { className: "address-tabs" });
 }
 
 function addressTabContent(state, compoundFooter) {
@@ -541,7 +536,7 @@ export function showManageAddress(opts) {
 // --- Spending addresses: iOS ManageAddressesView -----------------------------------------------
 
 let listSnapshot = null; // paints instantly next time (iOS kachat_spending_entries_cache)
-const domainOwners = new Map(); // address -> owns a KNS domain
+const domainOwners = new Map(); // address -> holds a .kachat name
 
 function displayLabel(row) { return row.label; }
 
@@ -637,13 +632,10 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     await Promise.all(Array.from({ length: 8 }, worker));
   };
 
-  // the chatting address's Used and Contains domain tags (K iOS ManageAddressesView)
+  // the chatting address's Used tag (its Contains username tag comes with probeDomains)
   const probeChatting = async () => {
     const address = state.chatting?.address;
     if (!address) return;
-    if (!domainOwners.has(address)) {
-      try { domainOwners.set(address, (await wallet.domains(address)).domains.length > 0); } catch { /* leave unknown */ }
-    }
     if (state.chatting?.balance > 0n) state.used.set(address, true);
     else if (!state.used.has(address)) {
       const used = (await wallet.knownUsedState(address)) ?? (await wallet.addressUsed(address).catch(() => null));
@@ -653,17 +645,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
   };
 
   const probeDomains = async () => {
-    const queue = visibleRows().filter((r) => !domainOwners.has(r.address));
-    const worker = async () => {
-      for (let row = queue.shift(); row; row = queue.shift()) {
-        try {
-          const data = await wallet.domains(row.address);
-          domainOwners.set(row.address, data.domains.length > 0);
-        } catch { /* leave unknown */ }
-      }
-    };
-    await Promise.all(Array.from({ length: 4 }, worker));
-    // .kachat names count too, where the registry is live (iOS 881ada6 ownersOfNames).
+    // the addresses holding a .kachat name (K iOS 518fdc8c: the only name service)
     try {
       const owners = await kachatRegistry()?.ownersOfNames([...visibleRows().map((r) => r.address), ...(state.chatting?.address ? [state.chatting.address] : [])]);
       for (const address of owners || []) domainOwners.set(address, true);
@@ -744,7 +726,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
       // (KaPay iOS e188209)
       { label: "Generate Non-Quantum Address", subtitle: "A regular address, like Receive gives you. Works with everything, kUSDT included.", icon: SF.plusCircle, busy: state.busy === "generate-regular", disabled: discovering || busy, onClick: () => generate({ quantum: false }) },
       { label: "Generate Quantum-Resistant Address", subtitle: "Keeps its key hidden until it spends. For Kaspa only: kUSDT can't be traded from it.", icon: SF.shield, busy: state.busy === "generate-quantum", disabled: discovering || busy, onClick: () => generate({ quantum: true }) },
-      { label: "Discover Addresses", subtitle: "Finds addresses holding a balance or a domain.", icon: SF.magnifier, disabled: discovering, keepOpen: true, onClick: discover },
+      { label: "Discover Addresses", subtitle: "Finds addresses holding a balance or a username.", icon: SF.magnifier, disabled: discovering, keepOpen: true, onClick: discover },
       { label: "Address Visibility", subtitle: "Check off every address you want on the list, in one sitting.", icon: SF.checklist, disabled: discovering, onClick: () => showVisibility({ onBack: back }) },
     ];
   };
@@ -756,7 +738,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
       <div class="discovery">
         <span class="spinner"></span>
         <div class="strong">${wallet.isQuantumIndex(d.checkingIndex) ? "Checking quantum-safe addresses" : `Checking address #${d.checkingIndex}`}</div>
-        <div class="muted small">${d.foundCount ? `${d.foundCount} found so far` : "No addresses with a balance or domain yet"}</div>
+        <div class="muted small">${d.foundCount ? `${d.foundCount} found so far` : "No addresses with a balance or username yet"}</div>
         <div class="muted tiny">Checks the first thousand addresses whatever the gaps, then keeps going while it keeps finding.</div>
         <button class="sheet-row center-text" id="keep-scanning"><span class="sheet-label">Close and Keep Scanning</span></button>
       </div>`;
@@ -804,7 +786,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     let message;
     try {
       const found = await wallet.discoverSpendingAddresses((progress) => { state.discovery = progress; refreshActions(); });
-      message = found ? `Found ${found} address${found === 1 ? "" : "es"} with a balance or domain.` : "No addresses with a balance or domain found.";
+      message = !found ? "No addresses with a balance or username found." : found === 1 ? "Found 1 address with a balance or username." : `Found ${found} addresses with a balance or username.`;
     } catch (error) {
       message = error.message;
     }
@@ -828,7 +810,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
               ${chattingUnread
                 ? '<span class="muted small">Couldn\'t load the coins at this address</span>'
                 : `<span class="strong small">${esc(groupedKas8(state.chatting.balance))} KAS</span>`}
-              ${state.used.get(state.chatting.address) === true || domainOwners.get(state.chatting.address) ? `<span class="address-status">${state.used.get(state.chatting.address) === true ? '<span class="used-badge used">Used</span>' : ""}${domainOwners.get(state.chatting.address) ? '<span class="domain-tag">Contains domain</span>' : ""}</span>` : ""}
+              ${state.used.get(state.chatting.address) === true || domainOwners.get(state.chatting.address) ? `<span class="address-status">${state.used.get(state.chatting.address) === true ? '<span class="used-badge used">Used</span>' : ""}${domainOwners.get(state.chatting.address) ? '<span class="domain-tag">Contains username</span>' : ""}</span>` : ""}
             </div>
           </div>` : "";
     const busy = Boolean(state.discovery) || Boolean(state.busy?.startsWith?.("generate"));
@@ -856,7 +838,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
                 <span class="muted small medium">${esc(displayLabel(row))}${quantumShieldHtml(row)}</span>
                 <span class="mono small">${esc(shortAddress(row.address))}</span>
                 <span class="strong small">${esc(groupedKas8(row.balanceSompi))} KAS</span>
-                <span class="address-status">${usedBadge(row)}${domainOwners.get(row.address) ? '<span class="domain-tag">Contains domain</span>' : ""}</span>
+                <span class="address-status">${usedBadge(row)}${domainOwners.get(row.address) ? '<span class="domain-tag">Contains username</span>' : ""}</span>
               </div>
               ${state.busy?.primary === row.index
                 ? '<span class="spinner small-spin"></span>'
@@ -1144,8 +1126,8 @@ function showVisibility({ onBack }) {
 // --- Change Chatting Address: iOS ChattingAddressPickerView ------------------------------------
 //
 // For imported accounts: the phrase may already hold your identity at another index of its
-// family - a KNS domain or a funded balance. Scans 50 at a time; lists an index when it holds
-// Kaspa or domains, or is #0, or is the current one.
+// family - a .kachat name or a funded balance. Scans 50 at a time; lists an index when it holds
+// Kaspa or a name, or is #0, or is the current one.
 
 /** Each candidate's .kachat names (K iOS NameServicesClient.kachatNames(of:)): the registry's batch
  *  identity read, else one read per address; none where the registry isn't live. */
@@ -1185,22 +1167,22 @@ function showChattingAddressPicker({ onBack, onChanged }) {
 
   const paint = () => {
     // .kachat names count too, and name the row first (K iOS ChattingAddressCandidate)
-    const nameCount = (r) => (r.kachatNames?.length || 0) + (r.domains?.length || 0) + (r.otherNames?.length || 0);
-    const onlyName = (r) => (nameCount(r) === 1 ? (r.kachatNames?.[0] ? kachatLabel(r.kachatNames[0]) : r.domains?.[0]?.fullName || r.otherNames?.[0]?.display) : null);
+    const nameCount = (r) => r.kachatNames?.length || 0;
+    const onlyName = (r) => (nameCount(r) === 1 ? kachatLabel(r.kachatNames[0]) : null);
     const shown = state.rows.filter((r) => r.balanceSompi > 0n || nameCount(r) > 0 || r.index === 0 || r.index === state.current);
     render(`
       ${navHeader({ title: "Chatting Address" })}
       <section class="screen manage">
         <div class="source-head">
           <h2>Choose Your Chatting Address</h2>
-          <p class="muted">If these words already hold your identity at a different address - a domain (.kachat, .kas, .k or .kaspa) or a funded chatting balance - pick it here. Only addresses with a balance or domains are shown.</p>
+          <p class="muted">If these words already hold your identity at a different address - a .kachat name or a funded chatting balance - pick it here. Only addresses with a balance or names are shown.</p>
         </div>
         <div class="glass list">
           ${shown.map((row) => `
             <button class="list-row identity-row" data-index="${row.index}">
               <span class="identity-index">#${row.index}</span>
               <span class="tx-meta"><span class="mono small">${esc(row.address.slice(0, 10))}...${esc(row.address.slice(-6))}</span><span class="muted tiny">${esc(wallet.formatKas(row.balanceSompi, 8))} KAS</span></span>
-              ${nameCount(row) ? `<span class="chip accent">${esc(onlyName(row) || `${nameCount(row)} domains`)}</span>` : ""}
+              ${nameCount(row) ? `<span class="chip accent">${esc(onlyName(row) || `${nameCount(row)} names`)}</span>` : ""}
               <span class="${row.index === state.current ? "accent strong" : "muted strong"} tiny">${row.index === state.current ? "Current" : row.index === 0 ? "Default" : ""}</span>
               ${ICONS.chevron}
             </button>`).join("") || (state.scanning ? "" : '<div class="list-row muted">Nothing found yet.</div>')}
@@ -1237,12 +1219,6 @@ function showIdentityDetail({ row, current, onBack, onChanged }) {
       ${row.kachatNames?.length ? `
         <div class="section-header">.kachat Names (${row.kachatNames.length})</div>
         ${row.kachatNames.map((n) => `<div class="domain-card small-card"><span class="domain-name">${esc(kachatLabel(n))}</span></div>`).join("")}` : ""}
-      ${row.otherNames?.length ? `
-        <div class="section-header">.k and .kaspa Names (${row.otherNames.length})</div>
-        ${row.otherNames.map((n) => `<div class="domain-card small-card"><span class="domain-name">${esc(n.display)}</span>${n.provisional ? '<span class="domain-badge">Settling</span>' : ""}</div>`).join("")}` : ""}
-      ${row.domains?.length ? `
-        <div class="section-header">.kas Names (${row.domains.length})</div>
-        ${row.domains.map((d) => `<div class="domain-card small-card"><span class="domain-name">${esc(d.fullName)}</span>${String(d.fullName).toLowerCase() === String(row.primaryDomain || "").toLowerCase() ? '<span class="domain-badge">Primary</span>' : ""}</div>`).join("")}` : ""}
       <p class="error" id="error"></p>
       <div class="spacer"></div>
       <button id="set" ${isCurrent ? "disabled" : ""}>${isCurrent ? "Current Chatting Address" : "Set as Chatting Address"}</button>

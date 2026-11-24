@@ -1,7 +1,7 @@
 // Send Kaspa - iOS WithdrawKaspaView, in steps (KaPay 05db583) ending on the swipe-up send screen
 // (59593af), built from the step screens (send-steps.js) and the Send Kaspa pieces (send-pieces.js):
-//   To      "Who are you sending to?": the recipient card - a kaspa: address, or a name on any
-//           service (.kachat, .kas, .k, .kaspa) resolved as you type, with "Other domains"; Paste,
+//   To      "Who are you sending to?": the recipient card - a kaspa: address, or a .kachat
+//           username resolved as you type (K iOS 518fdc8c: the only name service); Paste,
 //           Scan QR and Contacts pills (8118f09). A kachat.app/pay link fills in the request.
 //   From    "Where are you sending from?": the Chatting Address, or Choose an Address with your
 //           addresses listed on the step. Skipped when the From is fixed (an address's own Send).
@@ -19,7 +19,7 @@
 import * as wallet from "./wallet.js";
 import * as vault from "./vault.js";
 import { app, esc, render, $, toast, settings, ICONS, formatKas8, unitText } from "./ui.js";
-import { otherDomainsHtml, bindOtherDomains, splitTypedName, requesterName } from "./names.js";
+import { requesterName } from "./names.js";
 import { scanQr } from "./camera.js";
 import { loadOwnAddresses, isOwnPaymentRequest, ownAddressLabel } from "./own-addresses.js";
 import { openPanel } from "./kachat-ui.js";
@@ -79,8 +79,6 @@ export function showSend(opts) {
     recipient: opts.compound ? { address: opts.fromAddress, domain: null } : null,
     recipientError: "",
     resolving: false,
-    resolutions: [],        // every name service's answer for a typed name ("Other domains")
-    othersOpen: false,
     amountText: "",
     maxMode: false,
     fillingMax: false,
@@ -401,10 +399,7 @@ export function showSend(opts) {
     onChange: (found) => {
       state.recipient = found.recipient;
       state.recipientError = found.error;
-      state.resolutions = found.resolutions;
       state.resolving = found.resolving;
-      // Nothing for the ending typed, but another service has the name: show it straight away.
-      state.othersOpen = Boolean(found.error) && found.resolutions.some((r) => r.address);
       paint();
     },
   });
@@ -415,9 +410,6 @@ export function showSend(opts) {
     resolvedName: state.recipient?.domain || null,
     valid: Boolean(state.recipient && !state.recipient.domain),
   });
-  const otherDomains = () => (state.resolutions.length
-    ? otherDomainsHtml({ resolutions: state.resolutions, selectedTld: state.recipient?.tld || splitTypedName(state.recipientInput).tld, open: state.othersOpen })
-    : "");
   /** A new recipient from Paste, Scan QR or Contacts: into the field, looked up at once. */
   const setRecipientText = (text) => {
     state.request = null;
@@ -512,7 +504,7 @@ export function showSend(opts) {
       question: "Who are you sending to?",
       bodyHtml: `
         ${titleLine()}
-        ${recipientCardHtml({ input: state.recipientInput, status: recipientStatus(), extraHtml: otherDomains() })}
+        ${recipientCardHtml({ input: state.recipientInput, status: recipientStatus() })}
         <div id="send-request">${requestHtml()}</div>`,
       onCancel: () => opts.onClose?.(),
       canContinue: () => Boolean(state.recipient) && !state.resolving,
@@ -556,22 +548,11 @@ export function showSend(opts) {
     try { input.setSelectionRange(input.value.length, input.value.length); } catch { /* fine */ }
   };
   const bindRecipientExtras = () => {
-    bindOtherDomains(handle.el, {
-      onToggle: () => { state.othersOpen = !state.othersOpen; paintRecipient(); },
-      onPick: (tld) => {
-        const pick = state.resolutions.find((r) => r.tld === tld && r.address);
-        if (!pick) return;
-        state.recipient = { address: pick.address, domain: pick.display, tld: pick.tld, resolutions: state.resolutions };
-        state.recipientError = "";
-        state.othersOpen = false;
-        paintRecipient();
-      },
-    });
   };
   const paintRecipient = () => {
     const status = handle.el.querySelector("#recipient-status");
     if (!status) return;
-    status.innerHTML = unitText(recipientStatusHtml({ input: state.recipientInput, status: recipientStatus(), extraHtml: otherDomains() }));
+    status.innerHTML = unitText(recipientStatusHtml({ input: state.recipientInput, status: recipientStatus() }));
     const request = handle.el.querySelector("#send-request");
     if (request) request.innerHTML = unitText(requestHtml());
     bindRecipientExtras();

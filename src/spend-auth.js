@@ -1,6 +1,6 @@
 // The wallet password where KaPay iOS asks Face ID (iOS DeviceAuth). Kaspa sends no longer ask
 // (KaPay iOS 5848fb0, the owner's choice of 2026-11-13): Send Kaspa, Max and Compound go on the
-// tap. It is still asked before .kas transfers (Send Domain, Finish Transfer), Set as Primary, and
+// tap. It is still asked before Finish Transfer (an unfinished .kas transfer) and
 // payments a website asks for (approve.js), before anything is built or a node is touched.
 // Cancelling sends nothing.
 

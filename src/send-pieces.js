@@ -54,7 +54,7 @@ export function recipientCardHtml({ input = "", lockedAddress = null, status = {
   return `
     <div class="sk-card">
       <div class="sk-label">To</div>
-      <input id="recipient" class="sk-recipient sk-recipient-field mono" value="${esc(input)}" placeholder="kaspa:qr... or domain" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      <input id="recipient" class="sk-recipient sk-recipient-field mono" value="${esc(input)}" placeholder="kaspa:qr... or username" autocomplete="off" autocapitalize="off" spellcheck="false" />
       <div class="sk-input-pills">
         <button type="button" class="sk-input-pill" id="paste">${ICONS.clipboard}<span>Paste</span></button>
         <button type="button" class="sk-input-pill" id="scan">${SCAN}<span>Scan QR</span></button>
@@ -70,7 +70,7 @@ export function recipientStatusHtml({ input = "", status = {}, extraHtml = "" })
   const shownAddress = status.resolvedAddress || (status.valid ? trimmed : null);
   let line = "";
   if (trimmed) {
-    if (status.resolving) line = '<div class="sk-status muted"><span class="spinner small-spin"></span><span>Looking up domain...</span></div>';
+    if (status.resolving) line = '<div class="sk-status muted"><span class="spinner small-spin"></span><span>Looking up username...</span></div>';
     else if (status.error) line = `<div class="sk-status bad">${ICONS.xCircle}<span>${esc(status.error)}</span></div>`;
     else if (status.resolvedAddress) {
       line = `<div class="sk-status good">${ICONS.checkFill}<span>Resolved: ${esc(status.resolvedName || "")}</span></div>
@@ -106,15 +106,14 @@ export function addressResolutionHtml({ address, name = null }) {
  * The lookup behind a To field (iOS resolveKNSDomain, f0f394d): every change shows the spinner
  * at once and waits `delay` ms; then what the field holds is resolved. An answer is used only
  * while the field still holds the text it was asked about, and the newest lookup always takes
- * the spinner down - so a name typed quickly can never leave "Looking up domain..." up for good.
+ * the spinner down - so a name typed quickly can never leave "Looking up username..." up for good.
  *   read()          the field's text now
- *   resolve(text)   the answer ({ address, domain, tld, resolutions }), or throws the message
- *                   to show (with `resolutions` when another service has the name)
- *   onChange(state) { resolving, recipient, error, resolutions } changed: redraw
+ *   resolve(text)   the answer ({ address, domain, tld }), or throws the message to show
+ *   onChange(state) { resolving, recipient, error } changed: redraw
  * Returns { state, schedule() (after typing), now() (paste, scan, a pick), cancel() }.
  */
 export function recipientLookup({ read, resolve, onChange, delay = 350 }) {
-  const state = { resolving: false, recipient: null, error: "", resolutions: [] };
+  const state = { resolving: false, recipient: null, error: "" };
   let seq = 0;
   let timer = null;
   const text = () => String(read() ?? "").trim();
@@ -125,7 +124,6 @@ export function recipientLookup({ read, resolve, onChange, delay = 350 }) {
     const asked = text();
     state.recipient = null;
     state.error = "";
-    state.resolutions = [];
     state.resolving = Boolean(asked);
     onChange(state);
     if (!asked) return;
@@ -134,13 +132,8 @@ export function recipientLookup({ read, resolve, onChange, delay = 350 }) {
     try { answer = await resolve(asked); } catch (error) { failure = error; }
     if (mine !== seq) return; // a newer lookup owns the card (and its spinner)
     if (text() === asked) {
-      if (answer) {
-        state.recipient = answer;
-        state.resolutions = answer.resolutions || [];
-      } else {
-        state.error = String(failure?.message || failure || "Invalid address format");
-        state.resolutions = failure?.resolutions || [];
-      }
+      if (answer) state.recipient = answer;
+      else state.error = String(failure?.message || failure || "Invalid address format");
     }
     // The field moved on and its own lookup is still waiting: that one clears the spinner.
     state.resolving = Boolean(timer);

@@ -2,7 +2,7 @@
 // the create body ChangeNOW gets (`extraId`) and the check that its answer kept it.
 // Run: node tools/test-swap-extra-id.mjs
 import assert from "node:assert/strict";
-import { extraIdName, checkPayoutExtraId, withPayoutExtraId, payoutExtraIdKept } from "../src/swap-extra-id.js";
+import { extraIdName, checkPayoutExtraId, withPayoutExtraId, payoutExtraIdKept, swapAnswerMatches } from "../src/swap-extra-id.js";
 import { CURATED_COINS, KAS, createChangeNowClient } from "../shared/ui/swap-quote.js";
 
 let passed = 0;
@@ -57,4 +57,19 @@ await check("an answer without the tag that was sent is caught", () => {
   assert.equal(payoutExtraIdKept("", {}), true);
 });
 
+await check("ChangeNOW's answer must be the swap asked for (K iOS audit 2026-11-24 #6)", () => {
+  const BTC = coin("btc", "btc");
+  const asked = { from: BTC, to: KAS, amount: "0.01", payoutAddress: "kaspa:qabc" };
+  const answer = { payoutAddress: "kaspa:QABC", fromCurrency: "btc", toCurrency: "kas", fromNetwork: "btc", toNetwork: "kas", fromAmount: 0.01 };
+  assert.equal(swapAnswerMatches(answer, asked), true);
+  // fields ChangeNOW leaves out aren't held against it; the payout address must be there
+  assert.equal(swapAnswerMatches({ payoutAddress: "kaspa:qabc" }, asked), true);
+  assert.equal(swapAnswerMatches({ ...answer, payoutAddress: "" }, asked), false);
+  assert.equal(swapAnswerMatches({ ...answer, payoutAddress: "kaspa:qother" }, asked), false);
+  assert.equal(swapAnswerMatches({ ...answer, fromCurrency: "eth" }, asked), false);
+  assert.equal(swapAnswerMatches({ ...answer, toNetwork: "eth" }, asked), false);
+  assert.equal(swapAnswerMatches({ ...answer, fromAmount: 0.0101 }, asked), true);
+  assert.equal(swapAnswerMatches({ ...answer, fromAmount: 0.0102 }, asked), false);
+  assert.equal(swapAnswerMatches({ ...answer, fromAmount: "nope" }, asked), false);
+});
 console.log(`\n${passed} passed`);

@@ -23,7 +23,7 @@ import { openPanel } from "./kachat-ui.js";
 import { isValidKaspaAddress, networkOfAddress, NETWORK, reencodeAddress } from "./net.js";
 import { addressShapeOk, lowercasedKaspaAddress } from "./address-rules.js";
 import { scanQr } from "./camera.js";
-import { looksLikeName, resolveEverywhere, primaryResolution, notFoundMessage, otherDomainsHtml, bindOtherDomains, splitTypedName } from "./names.js";
+import { looksLikeName, resolveEverywhere, primaryResolution, notFoundMessage } from "./names.js";
 import * as dock from "./dock.js";
 import * as wallet from "./wallet.js";
 import { mergeContacts, datedAfterDeletion } from "./account-scope.js";
@@ -379,8 +379,8 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
     note: existing?.note ?? "",
     photo: undefined, // undefined unchanged, string set, null removed
     error: "",
-    // a typed domain, resolved .kachat first (iOS 6ac48a7): what the entry saves is its address
-    resolved: null, resolutions: [], resolving: false, resolveError: "", othersOpen: false, token: 0,
+    // a typed username (K iOS 518fdc8c: .kachat only): what the entry saves is its address
+    resolved: null, resolving: false, resolveError: "", token: 0,
   };
   let resolveTimer = null;
   const resolveTyped = () => {
@@ -388,7 +388,6 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
     const typed = form.address.trim();
     const token = ++form.token;
     form.resolved = null;
-    form.resolutions = [];
     form.resolveError = "";
     form.resolving = false;
     if (!typed || /^kaspa(test)?:/i.test(typed) || !looksLikeName(typed)) { paintStatus(); return; }
@@ -399,20 +398,19 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
       try { results = await resolveEverywhere(typed); } catch { results = []; }
       if (token !== form.token) return;
       form.resolving = false;
-      form.resolutions = results;
-      const primary = primaryResolution(results, typed);
+      const primary = primaryResolution(results);
       if (primary) form.resolved = { address: primary.address, domain: primary.display, tld: primary.tld };
-      else { form.resolveError = notFoundMessage(typed, results); form.othersOpen = results.some((r) => r.address); }
+      else form.resolveError = notFoundMessage(typed, results);
       paintStatus();
     }, 350);
   };
-  /** What "Use Their Domain Name" fills in (K iOS domainSuggestion): the typed domain that
+  /** What "Use Their Username" fills in (K iOS domainSuggestion): the typed username that
    *  resolved, in full ("alice.kachat", whatever Show .kachat Endings says - the book is shared with
-   *  K), never a .kas one (K clears .kas names from contacts). The address's own .kachat name isn't
+   *  K). The address's own .kachat name isn't
    *  looked up: a saved address is never sent to a server here (EXT-011). */
   const domainSuggestion = () => {
     const r = form.resolved;
-    if (!r?.address || !r.tld || r.tld === "kas") return null;
+    if (!r?.address || r.tld !== "kachat") return null;
     const shown = String(r.domain || "");
     return shown.toLowerCase().endsWith(`.${r.tld}`) ? shown : `${shown}.${r.tld}`;
   };
@@ -425,7 +423,7 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
     const box = panel.querySelector("[data-ab-suggest]");
     if (box) {
       box.hidden = !suggestion || form.name.trim() === suggestion;
-      box.innerHTML = suggestion ? `${ICONS.at}<span>Use Their Domain Name <span class="muted">(${esc(suggestion)})</span></span>` : "";
+      box.innerHTML = suggestion ? `${ICONS.at}<span>Use Their Username <span class="muted">(${esc(suggestion)})</span></span>` : "";
     }
     const clear = panel.querySelector("#ab-name-clear");
     if (clear) clear.hidden = !form.name;
@@ -433,7 +431,7 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
     if (save) save.disabled = !canSave();
   };
 
-  /** The line under the address field: the typed domain's address, or why it has none. */
+  /** The line under the address field: the typed username's address, or why it has none. */
   const paintStatus = () => {
     paintNameExtras();
     const host = handle?.panel.querySelector("[data-ab-resolve]");
@@ -442,16 +440,6 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
       ? '<span class="spinner small-spin"></span>'
       : form.resolved ? `<span class="tiny accent">${esc(form.resolved.domain)}</span><span class="mono tiny muted break">${esc(form.resolved.address)}</span>`
       : form.resolveError ? `<span class="tiny error-text">${esc(form.resolveError)}</span>` : "";
-    if (form.resolutions.length) {
-      host.insertAdjacentHTML("beforeend", otherDomainsHtml({ resolutions: form.resolutions, selectedTld: form.resolved ? splitTypedName(form.resolved.domain).tld : null, open: form.othersOpen }));
-      bindOtherDomains(host, {
-        onToggle: () => { form.othersOpen = !form.othersOpen; paintStatus(); },
-        onPick: (tld) => {
-          const pick = form.resolutions.find((r) => r.tld === tld && r.address);
-          if (pick) { form.resolved = { address: pick.address, domain: pick.display, tld: pick.tld }; form.othersOpen = false; paintStatus(); }
-        },
-      });
-    }
   };
   const currentPhoto = () => (form.photo === undefined ? (existing ? photos[existing.address] : null) : form.photo);
   let handle = null;
@@ -486,7 +474,7 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
         <div class="form-header">Address</div>
         <div class="form-card">
           <div class="form-row ab-address-row">
-            <input id="ab-address" class="mono" value="${esc(form.address)}" placeholder="${NETWORK === "testnet" ? "kaspatest" : "kaspa"}:... or domain" autocomplete="off" autocapitalize="off" spellcheck="false" ${existing ? "readonly" : ""} />
+            <input id="ab-address" class="mono" value="${esc(form.address)}" placeholder="${NETWORK === "testnet" ? "kaspatest" : "kaspa"}:... or username" autocomplete="off" autocapitalize="off" spellcheck="false" ${existing ? "readonly" : ""} />
             ${existing ? "" : `<button class="icon plain accent" id="ab-paste" aria-label="Paste" title="Paste">${ICONS.clipboard}</button>
             <button class="icon plain accent" id="ab-scan" aria-label="Scan QR" title="Scan QR">${SCAN}</button>`}
           </div>

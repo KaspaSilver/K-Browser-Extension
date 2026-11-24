@@ -4,7 +4,7 @@
 // recovery phrase:
 //   main address      m/44'/111111'/0'/0/{identityIndex}  (or the account's legacy family)
 //   spending address  m/44'/111111'/1'/0/{index}
-// The main address is what KaChat calls the chatting address - your identity, where KNS domains
+// The main address is what KaChat calls the chatting address - your identity, where .kachat names
 // live. Spending addresses are the fresh-address chain KaChat receives payments on.
 
 import { loadKaspaModule } from "../shared/engine/wasm-loader.js";
@@ -29,17 +29,13 @@ import { getEndpoint } from "../shared/engine/endpoints.js";
 import { getBalance, sendKaspa, sendMaxKaspa, estimateSendFeeDetail, estimateOnchainFeeDetail, estimateMaxSend, submitConfirmingAcceptance, SEND_OUTCOME_UNKNOWN, setReservedOutpoints, sanitizeUtxoEntries, excludeJustSpentUtxos } from "../shared/engine/transactions.js";
 import { checkedUtxoAnswer } from "../shared/engine/amounts.js";
 import { calculateMass, calculateFee, fetchQuotedFeeRateSompiPerGram } from "../shared/ui/kspt.js";
-import { looksLikeName, resolveEverywhere, primaryResolution, notFoundMessage, ownsAnyName, ownedNamesOfMany } from "./names.js";
+import { looksLikeName, resolveEverywhere, primaryResolution, notFoundMessage, ownsAnyName } from "./names.js";
 import { fetchKasPrice, peekKasPrice } from "../shared/engine/prices.js";
-import { getAddressInfo, fetchAddressInfo, peekAddressInfo, clearKnsCache } from "../shared/engine/kns.js";
 import { transactionBelongsInHistory } from "../shared/engine/sync.js";
-import {
-  transferDomain as knsTransferDomain, setKnsPrimaryDomain, setKnsPendingStorage, listPendingKnsTransfers,
-  resumeKnsTransfer, clearPendingKnsTransfer,
-} from "../shared/engine/kns-write.js";
+import { setKnsPendingStorage, listPendingKnsTransfers, resumeKnsTransfer, clearPendingKnsTransfer } from "../shared/engine/kns-write.js";
 import { getLocal, setLocal, removeLocal, getSession, setSession, localArea } from "./browser.js";
 import { reencodeAddress } from "../shared/engine/network.js";
-import { IS_TESTNET, NETWORK as ACTIVE_NETWORK, NETWORK_ID, ADDRESS_PREFIX, KAS_UNIT, netKey, MAINNET_REST, TESTNET_REST, MAINNET_KNS, TESTNET_KNS, isValidKaspaAddress, networkOfAddress } from "./net.js";
+import { IS_TESTNET, NETWORK as ACTIVE_NETWORK, NETWORK_ID, ADDRESS_PREFIX, KAS_UNIT, netKey, MAINNET_REST, TESTNET_REST, isValidKaspaAddress, networkOfAddress } from "./net.js";
 import { addressShapeOk, lowercasedKaspaAddress } from "./address-rules.js";
 import { activeAccountSecrets, accountSecretsById, ACCOUNT_IDS_KEY } from "./vault.js";
 import { sompiFromUserText } from "./amounts.js";
@@ -54,8 +50,8 @@ import { logInfo, logWarn } from "./log.js";
 
 let kaspaPromise = null;
 
-// A .kas transfer is a commit then a reveal; its recovery record (audit EXT-005) lives in the
-// extension's own storage, so a popup closed between the two can still finish it.
+// A .kas transfer (none start since K 5.4) was a commit then a reveal; its recovery record (audit
+// EXT-005) lives in the extension's own storage, so an unfinished one can still be revealed.
 setKnsPendingStorage({
   getItem: (key) => getLocal(key),
   setItem: (key, value) => setLocal(key, value),
@@ -455,43 +451,8 @@ export async function noteBalances(accountId, { main = undefined, spending = und
   }
 }
 
-// --- KNS ---------------------------------------------------------------------------------
-
-function knsOptions() {
-  const configured = String(getEndpoint("knsApi") || "").replace(/\/+$/, "");
-  if (IS_TESTNET && (!configured || configured === MAINNET_KNS)) return { baseUrl: TESTNET_KNS };
-  return { baseUrl: configured || MAINNET_KNS };
-}
-
-/** The KNS API for the running network (Connection Settings > Domains shows it). */
-export function knsApiUrl() { return knsOptions().baseUrl; }
 /** The Kaspa REST API for the running network. */
 export function restApiUrl() { return restBase(); }
-
-/** What is cached for an address right now (no network): { domainName, profile, domainCount }. */
-export function cachedKns(address) {
-  return knsView(peekAddressInfo(address));
-}
-
-/**
- * The address's .kas name and domain count, refreshed. Only the NAME: like iOS (KNSService
- * .loadsDomainProfiles = false), KaChat no longer loads .kas profiles - avatar, banner and bio
- * will come from .kachat names.
- */
-export async function kns(address, { force = false } = {}) {
-  const options = knsOptions();
-  const info = force ? await fetchAddressInfo(address, options) : await getAddressInfo(address, options);
-  return knsView(info);
-}
-
-function knsView(info) {
-  const domains = Array.isArray(info?.allDomains) ? info.allDomains : [];
-  return {
-    domainName: info?.primaryDomain || null,
-    domainCount: domains.length,
-    known: Boolean(info),
-  };
-}
 
 // --- Price -------------------------------------------------------------------------------
 
@@ -743,11 +704,8 @@ export function otherNetworkReason(address) {
 }
 
 /**
- * What the recipient field means: a kaspa: address, or a name on any service (iOS
- * NameServicesClient) - the ending typed, else the first of .kachat, .kas, .k, .kaspa that
- * resolves. Returns { address, domain, tld, resolutions } - `resolutions` is every service's
- * answer, for the "Other domains" picker - or throws with the message to show (a not-found error
- * carries `resolutions` too: another service may have the name).
+ * What the recipient field means: a kaspa: address, or a .kachat username (K iOS 518fdc8c: the only
+ * name service). Returns { address, domain, tld } - or throws with the message to show.
  */
 export async function resolveRecipient(input) {
   const text = String(input || "").trim();
@@ -757,17 +715,13 @@ export async function resolveRecipient(input) {
     // (KaPay iOS 5848fb0 lowercasedKaspaAddress)
     const address = lowercasedKaspaAddress(text.split("?")[0]);
     if (!(await isValidAddress(address))) throw new Error(otherNetworkReason(address) || "Invalid address format");
-    return { address, domain: null, tld: null, resolutions: [] };
+    return { address, domain: null, tld: null };
   }
   if (looksLikeName(text)) {
     const resolutions = await resolveEverywhere(text);
-    const primary = primaryResolution(resolutions, text);
-    if (!primary) {
-      const error = new Error(notFoundMessage(text, resolutions));
-      error.resolutions = resolutions;
-      throw error;
-    }
-    return { address: primary.address, domain: primary.display, tld: primary.tld, resolutions };
+    const primary = primaryResolution(resolutions);
+    if (!primary) throw new Error(notFoundMessage(text, resolutions));
+    return { address: primary.address, domain: primary.display, tld: primary.tld };
   }
   throw new Error("Invalid address format");
 }
@@ -1648,13 +1602,13 @@ export async function runPendingDiscovery(accountId) {
 
 /**
  * iOS "Discover Addresses" (WalletManager.discoverSpendingAddresses). A match is an address
- * holding Kaspa or a KNS domain.
+ * holding Kaspa or a .kachat name (K iOS 518fdc8c: the only name service).
  *   fast path   indexes 0..999 whatever the gaps, then windows of 200 while a window shows any
  *               activity, up to #5000 (KaPay iOS 3d126db): one bulk /addresses/active pass per
- *               window says which were ever touched; UTXOs for the touched ones; KNS for touched,
+ *               window says which were ever touched; UTXOs for the touched ones; names for touched,
  *               unfunded ones below #200, 6 at a time.
  *   fallback    (the REST server can't answer /addresses/active) balances 100 at a time to #999,
- *               then windows of 200 while a window finds anything, up to #5000; KNS below #200.
+ *               then windows of 200 while a window finds anything, up to #5000; names below #200.
  * Matches are un-hidden; when the highest is past the revealed range, the range grows to it and
  * the empty indexes in between are hidden. onProgress({ checkingIndex, foundCount }).
  */
@@ -1664,13 +1618,12 @@ export async function discoverSpendingAddresses(onProgress = () => {}, { reveal 
   const DEEP_FLOOR = 1000;
   const MAX_INDEX = 5000;
   const BATCH = 100;
-  const KNS_DEPTH = 200;
+  const NAME_DEPTH = 200;
   // past the floor: windows of this many, while a window shows activity (KaPay iOS 3d126db)
   const WINDOW = 200;
   const found = new Set();
   const addresses = {};
-  // Any name service (iOS 7a5b157): .kas through KNS, .k and .kaspa through their own APIs.
-  const knsOwns = (address) => ownsAnyName(address, async (a) => ((await getAddressInfo(a, knsOptions()))?.allDomains || []).length > 0);
+  const nameOwns = (address) => ownsAnyName(address);
 
   onProgress({ checkingIndex: 0, foundCount: 0 });
   Object.assign(addresses, await spendingAddressRange(0, DEEP_FLOOR, account));
@@ -1680,14 +1633,14 @@ export async function discoverSpendingAddresses(onProgress = () => {}, { reveal 
     const touched = Array.from({ length: DEEP_FLOOR }, (_, i) => i).filter((i) => active[addresses[i]]);
     onProgress({ checkingIndex: DEEP_FLOOR - 1, foundCount: 0 });
     const balances = await balancesFor(touched.map((i) => addresses[i]));
-    const knsChecks = [];
+    const nameChecks = [];
     for (const index of touched) {
       if ((balances[addresses[index]] ?? 0n) > 0n) found.add(index);
-      else if (index < KNS_DEPTH) knsChecks.push(index);
+      else if (index < NAME_DEPTH) nameChecks.push(index);
     }
-    for (let i = 0; i < knsChecks.length; i += 6) {
-      const slice = knsChecks.slice(i, i + 6);
-      const owns = await Promise.all(slice.map((index) => knsOwns(addresses[index])));
+    for (let i = 0; i < nameChecks.length; i += 6) {
+      const slice = nameChecks.slice(i, i + 6);
+      const owns = await Promise.all(slice.map((index) => nameOwns(addresses[index])));
       slice.forEach((index, j) => { if (owns[j]) found.add(index); });
       onProgress({ checkingIndex: slice[slice.length - 1], foundCount: found.size });
     }
@@ -1713,7 +1666,7 @@ export async function discoverSpendingAddresses(onProgress = () => {}, { reveal 
       let hits = 0;
       for (const index of indexes) {
         let hit = (balances[addresses[index]] ?? 0n) > 0n;
-        if (!hit && index < KNS_DEPTH) hit = await knsOwns(addresses[index]);
+        if (!hit && index < NAME_DEPTH) hit = await nameOwns(addresses[index]);
         if (hit) { found.add(index); hits += 1; }
       }
       onProgress({ checkingIndex: start + size - 1, foundCount: found.size });
@@ -1785,23 +1738,13 @@ export function currentExplorer() { return explorerId; }
 export function explorerTxUrl(txid) { return IS_TESTNET ? `https://tn10.kaspa.stream/transactions/${txid}` : `${EXPLORERS[explorerId].tx}${txid}`; }
 export function explorerAddressUrl(address) { return IS_TESTNET ? `https://tn10.kaspa.stream/addresses/${encodeURIComponent(address)}` : `${EXPLORERS[explorerId].address}${address}`; }
 
-// --- KNS domains ------------------------------------------------------------------------------
+// --- Unfinished .kas transfers ----------------------------------------------------------------
 //
-// Your Domains (iOS KNSDomainsListView): the chatting address's verified domains, newest first,
-// and which one is primary. Set as Primary is a signed message to the KNS API (no transaction);
-// Send is the on-chain commit/reveal transfer inscription. No inscribing new domains and no
-// profile editing here - profiles are moving to .kachat names.
-
-/** { domains:[{fullName, inscriptionId, status, createdAt}], primaryDomain } - cached, or fetched. */
-export function cachedDomains(address) {
-  const info = peekAddressInfo(address);
-  return info ? { domains: info.allDomains || [], primaryDomain: info.primaryDomain || null } : null;
-}
-
-export async function domains(address, { force = false } = {}) {
-  const info = force ? await fetchAddressInfo(address, knsOptions()) : await getAddressInfo(address, knsOptions());
-  return { domains: info?.allDomains || [], primaryDomain: info?.primaryDomain || null };
-}
+// K reads no .kas names since 5.4 (K iOS 518fdc8c: .kachat only), and starts no .kas transfer. A
+// transfer started before then whose commit went out without its reveal still holds 2 KAS only its
+// saved redeem script can spend: the reveal is finished here (iOS KNSRevealRecovery, kept until no
+// record is left), on its own while the Wallet tab refreshes, else from Your Usernames' Finish
+// Transfer.
 
 // The engine's KNS write path expects its wallet object; this is the same shape for one source.
 async function knsEngine(source, reviewed = null) {
@@ -1820,83 +1763,6 @@ async function knsEngine(source, reviewed = null) {
   return engine;
 }
 
-/** Makes `domainId` the chatting address's primary name. Throws with the API's reason. */
-export async function setPrimaryDomain(domainId, domainName = "") {
-  // it acts for this wallet like any other, so it's asked for like any other (KaPay iOS 2da5f4b)
-  await confirmSpend({ title: "Set as Primary", amountText: String(domainName), message: "Confirm setting your primary domain", confirmLabel: "Confirm" });
-  const engine = await knsEngine({ kind: "main" });
-  await setKnsPrimaryDomain({ engine, domainId, baseUrl: knsApiUrl() });
-  clearKnsCache(engine.address);
-}
-
-/**
- * Transfers a domain from the chatting address: commit, then reveal, then waits (up to 90 s)
- * for the KNS API to show the new owner. onStatus gets the engine's stage names.
- */
-export async function transferDomain({ domain, assetId, toAddress, priorityFeeSompi, source = { kind: "main" }, fromAddress = null, onStatus = () => {} }) {
-  await confirmSpend({ title: "Confirm Transfer", amountText: String(domain?.fullName || domain?.name || domain || "Domain"), recipient: toAddress });
-  // `fromAddress`: the owner the screen showed - another account's key is refused (SOURCE_CHANGED)
-  const engine = await knsEngine(source, { address: fromAddress });
-  // From the PRIMARY spending address the change goes to a fresh quantum-safe slot, checked on chain,
-  // and the primary moves there once it is accepted (iOS KNSDomainTransferService, engine
-  // spendingChangeIndex "kns"). Every write is the signing key's account's.
-  let fresh = null;
-  if (source?.kind === "spending") {
-    const state = await spendingState(engine.accountId);
-    if (source.index === state.activeIndex) {
-      // claimed and recorded before the commit goes out, like a send's change slot: a closed popup
-      // mid-transfer still finds the change
-      const slot = await claimFreshQuantumSlot(await accountSecretsById(engine.accountId));
-      if (slot?.address) fresh = { accountId: engine.accountId, index: slot.index, address: slot.address };
-    }
-  }
-  // The primary follows its change once the commit is out or may be (KaPay iOS 2da5f4b), whatever
-  // becomes of the reveal, which resumeDomainReveals tries again; a slip here never fails the transfer.
-  let followed = false;
-  const followChange = async () => {
-    if (!fresh || followed) return;
-    followed = true;
-    await recordQuietly(async () => {
-      await markAddressUsed(fresh.address);
-      await saveSpendingState(fresh.accountId, { activeIndex: fresh.index });
-    });
-  };
-  const markInFlow = String(assetId || "").trim();
-  transfersInFlow.add(markInFlow);
-  try {
-    // Watched like a send (KaPay iOS 1652437: every node-pool submit holds its coins): the commit's
-    // coins are held once it's out, also when the reveal then fails; not when the commit is "Not
-    // confirmed" (KaPay iOS 2da5f4b).
-    const result = await spendFrom(engine.address, (watched) => {
-      engine.kaspa = watched.kaspa;
-      engine.withRpc = watched.withRpc;
-      return knsTransferDomain({
-        engine, domain, assetId, toAddress,
-        signer: { privateKey: engine.privateKey, address: engine.address },
-        // Who signs, so Finish transfer can rebuild the commit's key after a closed popup.
-        source: { kind: source?.kind || "main", index: source?.index ?? null, accountId: engine.accountId },
-        changeAddress: fresh?.address || null,
-        revealPriorityFeeSompi: priorityFeeSompi,
-        onStatus: (update) => {
-          if (update?.status === "committed") followChange();
-          onStatus(update);
-        },
-        log: logInfo,
-      });
-    });
-    await followChange();
-    return result;
-  } catch (error) {
-    if (error?.code === SEND_OUTCOME_UNKNOWN) await followChange();
-    throw error;
-  } finally {
-    transfersInFlow.delete(markInFlow);
-  }
-}
-
-// The asset ids of .kas transfers running in this page: they do their own reveal (iOS
-// KNSRevealRecovery.inFlow).
-const transfersInFlow = new Set();
 let resumingReveals = false;
 
 /**
@@ -1912,7 +1778,7 @@ export async function resumeDomainReveals() {
   resumingReveals = true;
   try {
     const account = await activeAccountSecrets();
-    for (const record of revealsToRetry(await listPendingKnsTransfers(), { accountId: account.id, inFlow: transfersInFlow })) {
+    for (const record of revealsToRetry(await listPendingKnsTransfers(), { accountId: account.id, inFlow: new Set() })) {
       if ((await activeAccountSecrets()).id !== account.id) return;
       try {
         const entries = (await withRpc(async (node) => checkedUtxoAnswer(await node.getUtxosByAddresses([record.commitAddress]))))?.entries;
@@ -2069,7 +1935,8 @@ async function addressesWithHistory(addresses) {
 
 /**
  * Identity addresses `start..start+count-1` of the active account's family, each with its
- * balance and KNS domains. Listed when they hold something, are index 0, or are current.
+ * balance (the picker adds their .kachat names). Listed when they hold something, are index 0, or
+ * are current.
  * `scansFurther` false: a single-address wallet type (Chainge, KaChat-Desktop Build 277), whose
  * only address is #0.
  */
@@ -2084,26 +1951,7 @@ export async function scanIdentityAddresses(start = 0, count = 50) {
     rows.push({ index, address: derived.address });
   }
   const balancesByAddress = await balancesFor(rows.map((r) => r.address));
-  // KNS a few at a time: the API rate-limits bursts.
-  const queue = [...rows];
-  const worker = async () => {
-    for (let row = queue.shift(); row; row = queue.shift()) {
-      try {
-        const info = await getAddressInfo(row.address, knsOptions());
-        row.domains = info?.allDomains || [];
-        row.primaryDomain = info?.primaryDomain || null;
-      } catch {
-        row.domains = [];
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: 4 }, worker));
-  // .k and .kaspa too: an identity can live at an address whose only trace is a name there.
-  const otherNames = await ownedNamesOfMany(rows.map((r) => r.address));
-  for (const row of rows) {
-    row.balanceSompi = balancesByAddress[row.address] ?? 0n;
-    row.otherNames = otherNames[row.address] || [];
-  }
+  for (const row of rows) row.balanceSompi = balancesByAddress[row.address] ?? 0n;
   return { rows, currentIndex: account.identityIndex || 0, scansFurther };
 }
 

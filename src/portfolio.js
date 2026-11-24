@@ -735,7 +735,8 @@ function showAddAddress(preset = null) {
   const canImport = () => !s.importing && (Boolean(s.resolved?.address) || validRaw(s.input));
 
   const statusHtml = () => {
-    if (!s.input || s.resolving) return "";
+    if (!s.input) return "";
+    if (s.resolving) return '<div class="pf-status muted"><span class="spinner small-spin"></span><span>Looking up username...</span></div>';
     if (s.resolved) return `<div class="pf-status good">${SF.checkCircleFill(13)}<span>Resolves to ${esc(short(s.resolved.address))}</span></div>`;
     if (s.notFound) return `<div class="pf-status muted">${esc(notFoundMessage(s.input, s.results || []))}</div>`;
     if (looksRaw(s.input)) {
@@ -745,40 +746,30 @@ function showAddAddress(preset = null) {
     }
     return "";
   };
-  // AddressResolutionCard: who the address is - its KNS name when it has one - and the address.
-  const profiles = {};
+  // AddressResolutionCard: the username typed, when one resolved (K iOS 518fdc8c: no reverse
+  // lookup any more, .kas was the only one), and the address.
   const cardHtml = () => {
     const address = s.resolved?.address || (validRaw(s.input) ? s.input.toLowerCase() : null);
     if (!address) return "";
-    let info = profiles[address];
-    if (info === undefined) {
-      const cached = wallet.cachedKns(address);
-      info = profiles[address] = cached?.known ? { name: cached.domainName || null } : "loading";
-      if (info === "loading") {
-        wallet.kns(address).then((result) => { profiles[address] = { name: result?.domainName || null }; refreshExtra(); })
-          .catch(() => { profiles[address] = { name: null }; refreshExtra(); });
-      }
-    }
-    const name = info === "loading" ? null : info.name;
+    const name = s.resolved?.display || null;
     return `
       <div class="form-row"><div class="pf-resolution">
         <span class="pf-res-avatar">${ICONS.person}</span>
-        <span class="pf-res-text"><span class="${name ? "strong" : "muted strong"} ellipsis">${esc(name || (info === "loading" ? "Looking up..." : "No domain"))}</span><span class="mono pf-tiny muted ellipsis">${esc(middle(address, 14))}</span></span>
-        ${info === "loading" ? '<span class="spinner small-spin"></span>' : ""}
+        <span class="pf-res-text"><span class="${name ? "strong" : "muted strong"} ellipsis">${esc(name || "No domain")}</span><span class="mono pf-tiny muted ellipsis">${esc(middle(address, 14))}</span></span>
       </div></div>`;
   };
   const bodyHtml = () => s.importing ? `
     <div class="form-section"><div class="form-card"><div class="form-row pf-progress"><span class="spinner small-spin"></span><span class="muted" id="pf-addr-progress">${esc(s.progress)}</span></div></div></div>` : `
     <div class="form-section">
       <div class="form-card">
-        <textarea id="pf-addr" class="mono recipient" rows="2" placeholder="kaspa:qr... or domain" spellcheck="false" autocapitalize="off" autocomplete="off">${esc(s.input)}</textarea>
+        <textarea id="pf-addr" class="mono recipient" rows="2" placeholder="kaspa:qr... or username" spellcheck="false" autocapitalize="off" autocomplete="off">${esc(s.input)}</textarea>
         <div id="pf-addr-extra">${cardHtml()}${statusHtml() ? `<div class="form-row">${statusHtml()}</div>` : ""}</div>
         <div class="form-row between">
           <button class="link-button" id="pf-addr-paste">${SF.clipboard(16)}<span>Paste</span></button>
           <button class="link-button" id="pf-addr-scan">${SF.qrViewfinder(16)}<span>Scan QR</span></button>
         </div>
       </div>
-      <div class="form-footer">Enter a Kaspa address or a domain like name.kachat (.kachat names are looked up first). Every received transaction on this address becomes a buy, every sent transaction becomes a sell, priced at that day's historical K&#x41;S price. Re-adding the same address later only imports transactions found since the last import.</div>
+      <div class="form-footer">Enter a Kaspa address or a username like name.kachat. Every received transaction on this address becomes a buy, every sent transaction becomes a sell, priced at that day's historical K&#x41;S price. Re-adding the same address later only imports transactions found since the last import.</div>
     </div>`;
   const bar = () => ({
     leading: { label: "Cancel", disabled: s.importing, onClick: () => panel.close() },
@@ -801,7 +792,7 @@ function showAddAddress(preset = null) {
         if (mine !== seq) return;
         let winner = null;
         let results = [];
-        try { results = await resolveEverywhere(s.input); winner = primaryResolution(results, s.input); } catch { winner = null; }
+        try { results = await resolveEverywhere(s.input); winner = primaryResolution(results); } catch { winner = null; }
         s.results = results;
         if (mine !== seq) return; // the field moved on while this was in flight
         s.resolving = false;

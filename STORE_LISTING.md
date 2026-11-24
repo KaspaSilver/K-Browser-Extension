@@ -17,7 +17,7 @@ both.
 **Name:** K Extension
 
 **Summary (max 132 characters):**
-K, the Kaspa wallet. Send and receive KAS, manage addresses and domains, and connect to Kaspa websites.
+K, the Kaspa wallet. Send and receive KAS, manage addresses and usernames, and connect to Kaspa websites.
 
 **Category:** Productivity > Tools (there is no finance category).
 
@@ -32,17 +32,15 @@ as K on iPhone and KaChat on Android and desktop.
   OneKey, Chainge, Ledger or the Kaspa CLI wallet: K finds which kind from your words
 - Back up your 12 or 24 words step by step, with a check that your paper copy is right, and a
   Backup Hygiene check every six months
-- Send Kaspa step by step: a keypad for the amount, .kas and .kachat name lookup, Max, coin
+- Send Kaspa step by step: a keypad for the amount, .kachat username lookup, Max, coin
   control, a review with Normal / Fast / Priority fees, and swipe up to send
 - A fresh receiving address every time, and Manage Addresses for your spending addresses:
   generate, discover, rename, hide and set the primary
 - History, coins (UTXOs) and Compound for every address
 - kUSDT, the dollar stablecoin on Kaspa bridged by Trestly: balances, send and receive it, combine
-  its coins, and Swap Stablecoins on Trestly's site
+  its coins, and open Trestly's site
 - Contacts: save the people you pay by address or name
-- Your domains on every Kaspa name service (.kas, .k, .kaspa) and .kachat names: claim a .kachat
-  name, set your primary .kas name and send a domain to someone else
-- Send to a name on any service - and pick another service's answer under "Other domains"
+- Your Usernames: your .kachat names, and claim one
 - Cold Storage: watch a KasSigner account by its kpub and send from it by signing on the device -
   the transaction goes out and the signature comes back as animated QR codes
 - Portfolio: up to five portfolios of buys and sells, price and value charts, profit and loss,
@@ -64,7 +62,7 @@ safe - they are the only way to restore your wallet.
 ## Privacy practices tab
 
 **Single purpose:** A Kaspa cryptocurrency wallet: hold keys locally, show balances, send and
-receive Kaspa, manage Kaspa name service domains, and let Kaspa websites request payments and
+receive Kaspa, manage .kachat usernames, and let Kaspa websites request payments and
 signatures with the user's approval.
 
 **Permission justifications:**
@@ -80,12 +78,11 @@ signatures with the user's approval.
 - Host permission `api.kaspa.org` - Kaspa REST API: transaction history and address usage.
 - Host permissions `*.kaspa.green`, `*.kaspa.red`, `*.kaspa.stream`, `*.kaspa.blue`, `*.kaspa.ws` -
   the public Kaspa node resolver and nodes, for balances and sending transactions.
-- Host permissions `api-tn10.kaspa.org`, `api-tn10.dotk.name` - the testnet-10 REST API and .k
-  name service, used only when the user turns on Testnet in Settings.
-- Host permission `api.knsdomains.org` - Kaspa Name Service: the .kas domains an address owns,
-  name lookups, setting the primary domain.
-- Host permissions `api.dotk.name`, `kaspaname.com` - the .k (dotk) and .kaspa (Kaspa Names)
-  name services, read-only: the names an address owns and name lookups.
+- Host permission `api-tn10.kaspa.org` - the testnet-10 REST API, used only when the user turns on
+  Testnet in Settings.
+- Host permission `api.knsdomains.org` - Kaspa Name Service, only to finish a .kas domain transfer
+  started by an earlier version whose second transaction never went out: it checks whether the
+  domain already reached its recipient. The request carries that domain's name.
 - Host permission `api.coingecko.com` - the Kaspa price in the user's currency and the
   Portfolio's price history.
 - Host permissions `api.gateio.ws`, `query1.finance.yahoo.com` - Portfolio: long-range KAS price

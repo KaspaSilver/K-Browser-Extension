@@ -21,8 +21,6 @@ export function netKey(base) {
 
 export const MAINNET_REST = "https://api.kaspa.org";
 export const TESTNET_REST = "https://api-tn10.kaspa.org";
-export const MAINNET_KNS = "https://api.knsdomains.org/mainnet/api/v1";
-export const TESTNET_KNS = "https://api.knsdomains.org/tn10/api/v1";
 
 /** Switches the network and keeps the worker's mirror in step. Pages reload to apply it. */
 export async function switchNetwork(network) {

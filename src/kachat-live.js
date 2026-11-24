@@ -17,7 +17,7 @@
 
 import { app, esc, render, $, toast, ICONS, navHeader, unitText, showSheet } from "./ui.js";
 import { KAS_UNIT, IS_TESTNET } from "./net.js";
-import { looksLikeName, resolveEverywhere, primaryResolution, notFoundMessage, otherDomainsHtml, bindOtherDomains, splitTypedName } from "./names.js";
+import { looksLikeName, resolveEverywhere, primaryResolution, notFoundMessage } from "./names.js";
 import { sompiFromUserText } from "./amounts.js";
 import * as vault from "./vault.js";
 import * as wallet from "./wallet.js";
@@ -2224,7 +2224,7 @@ function openListSheet(info) {
  *  Contacts under the field, and the saved name when the address is in your contacts (iOS bfe7ef9,
  *  8118f09) - then the review and swipe up to transfer. Only a Schnorr address can own a name. */
 function openTransferSheet(info) {
-  const state = { input: "", recipient: null, error: "", resolving: false, resolutions: [], othersOpen: false };
+  const state = { input: "", recipient: null, error: "", resolving: false };
   let entryStep = null;
 
   /** A resolved address must be a Schnorr P2PK one - only those can own a name. */
@@ -2235,25 +2235,24 @@ function openTransferSheet(info) {
     try { KachatNamesActions.validateKey(key, ""); } catch { return null; }
     return { address: a, key };
   };
-  const fail = (message, resolutions = []) => { const error = new Error(message); error.resolutions = resolutions; return error; };
+  const fail = (message) => new Error(message);
   const resolve = async (text) => {
     const t = String(text || "").trim().toLowerCase();
     if (t.startsWith("kaspatest:") || t.startsWith("kaspa:")) {
       const key = KachatNamesRegistry.keyOf(t);
       if (!key) throw fail("Not a Schnorr address on this network.");
       try { KachatNamesActions.validateKey(key, ""); } catch { throw fail("That address's key is not valid."); }
-      return { address: t, key, domain: null, tld: null, resolutions: [] };
+      return { address: t, key, domain: null, tld: null };
     }
-    // Any domain, .kachat first, like every address field (iOS 6ac48a7).
-    if (!looksLikeName(t)) throw fail("Enter an address or a domain.");
+    // a username, like every address field (K iOS 518fdc8c: .kachat only)
+    if (!looksLikeName(t)) throw fail("Enter an address or a username.");
     let results;
     try { results = await resolveEverywhere(t); } catch { throw fail("Couldn't look that name up."); }
-    // one shared message; what the name is elsewhere opens by itself (iOS 5a5122d)
-    const primary = primaryResolution(results, t);
-    if (!primary) throw fail(notFoundMessage(t, results), results);
+    const primary = primaryResolution(results);
+    if (!primary) throw fail(notFoundMessage(t, results));
     const owner = ownerOf(primary.address);
-    if (!owner) throw fail("That name's address can't own a .kachat name.", results);
-    return { ...owner, domain: primary.display, tld: primary.tld, resolutions: results };
+    if (!owner) throw fail("That name's address can't own a .kachat name.");
+    return { ...owner, domain: primary.display, tld: primary.tld };
   };
   const lookup = recipientLookup({
     read: () => state.input,
@@ -2261,10 +2260,8 @@ function openTransferSheet(info) {
     onChange: (found) => {
       state.recipient = found.recipient;
       state.error = found.error;
-      state.resolutions = found.resolutions;
       state.resolving = found.resolving;
       // nothing for the ending typed, but another service has the name: shown straight away
-      state.othersOpen = Boolean(found.error) && found.resolutions.some((r) => r.address);
       paintRecipient();
       changedPlan();
     },
@@ -2277,34 +2274,13 @@ function openTransferSheet(info) {
     resolvedName: state.recipient?.domain || null,
     valid: Boolean(state.recipient && !state.recipient.domain),
   });
-  const otherDomains = () => (state.resolutions.length
-    ? otherDomainsHtml({ resolutions: state.resolutions, selectedTld: state.recipient?.tld || splitTypedName(state.input).tld, open: state.othersOpen })
-    : "");
   const bindExtras = () => {
     if (!entryStep?.el.isConnected) return;
-    bindOtherDomains(entryStep.el, {
-      onToggle: () => { state.othersOpen = !state.othersOpen; paintRecipient(); },
-      onPick: (tld) => {
-        const pick = state.resolutions.find((r) => r.tld === tld && r.address);
-        if (!pick) return;
-        const owner = ownerOf(pick.address);
-        if (owner) {
-          state.recipient = { ...owner, domain: pick.display, tld: pick.tld, resolutions: state.resolutions };
-          state.error = "";
-        } else {
-          state.recipient = null;
-          state.error = "That name's address can't own a .kachat name.";
-        }
-        state.othersOpen = false;
-        paintRecipient();
-        changedPlan();
-      },
-    });
   };
   const paintRecipient = () => {
     const status = entryStep?.el.isConnected ? entryStep.el.querySelector("#recipient-status") : null;
     if (!status) return;
-    status.innerHTML = unitText(recipientStatusHtml({ input: state.input, status: recipientStatus(), extraHtml: otherDomains() }));
+    status.innerHTML = unitText(recipientStatusHtml({ input: state.input, status: recipientStatus() }));
     bindExtras();
     entryStep.refresh();
   };
@@ -2328,8 +2304,8 @@ function openTransferSheet(info) {
     entry: {
       question: "Who gets the name?",
       html: () => `
-        ${recipientCardHtml({ input: state.input, status: recipientStatus(), extraHtml: otherDomains() })}
-        <p class="muted tiny kl-entry-caption">An address or a domain - .kachat names are looked up first, and it's resolved to the address shown.</p>`,
+        ${recipientCardHtml({ input: state.input, status: recipientStatus() })}
+        <p class="muted tiny kl-entry-caption">An address or a username, resolved to the address shown.</p>`,
       canContinue,
       bind(step, { changed, next }) {
         entryStep = step;
@@ -2952,12 +2928,12 @@ export function liveDomainsTab({ address, repaint, forAddress = false }) {
         : forAddress
         ? `<div class="kachat-address-empty">
             ${kachatWordmark(40)}
-            <div class="strong">No .kachat names on this address</div>
-            <p class="muted small">Names this address owns show here.</p>
+            <div class="strong">No usernames on this address</div>
+            <p class="muted small">Usernames this address owns show here.</p>
           </div>`
         : `<div class="kachat-coming">
             <span class="accent">${ICONS.atCircle}</span>
-            <h3>No .kachat names yet</h3>
+            <h3>No usernames yet</h3>
           </div>`)
       : entry.names.map((n) => `
           <button class="domain-button" data-kachat-name="${esc(n.name)}" aria-label="${esc(n.display)}">

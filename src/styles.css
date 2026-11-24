@@ -533,8 +533,6 @@ textarea.recipient { background: transparent; border: 0; border-radius: 0; min-h
 .domain-name { color: #000; font-weight: 800; font-size: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .small-card .domain-name { font-size: 17px; }
 .domain-badge { position: absolute; top: 10px; right: 12px; font-size: 10.5px; font-weight: 800; color: #fff; background: rgba(0,0,0,.35); padding: 3px 9px; border-radius: 999px; }
-.asset-id { max-width: 60%; }
-button.domain-send { background: var(--kaspa); color: #000; border-radius: 999px; }
 .screen.progress-sheet { justify-content: center; gap: 14px; padding: 24px; }
 .progress { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
 .progress-bar { height: 100%; background: var(--kaspa); transition: width .4s ease; }
@@ -557,22 +555,11 @@ button.domain-send { background: var(--kaspa); color: #000; border-radius: 999px
 .list-row .muted.break, .list-row .break { white-space: normal; max-width: 100%; overflow: visible; word-break: break-all; }
 
 /* --- Name services: underline tabs (iOS UnderlineTabBar), Get a domain, Other domains --------- */
-.underline-tabs { display: flex; justify-content: space-around; border-bottom: .5px solid rgba(255,255,255,.12); padding: 0 8px; flex-shrink: 0; }
-.underline-tabs button { background: transparent; color: var(--muted); font-weight: 700; font-size: 15px; padding: 10px 6px 9px; border-radius: 0; border-bottom: 2.5px solid transparent; }
-.underline-tabs button[aria-selected="true"] { color: var(--kaspa); border-bottom-color: var(--kaspa); }
 .get-domain-bar { padding: 8px 16px 16px; flex-shrink: 0; }
 .get-domain { display: block; text-align: center; padding: 15px; border-radius: 999px; background: rgba(44,44,46,.72); border: 1.5px solid var(--kaspa); color: var(--kaspa); font-weight: 700; font-size: 14px; text-decoration: none; }
 .kachat-coming { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 36px 20px; }
 .kachat-coming h3 { margin: 4px 0 0; font-size: 16px; }
 .kachat-coming p { margin: 0; }
-.other-domains { width: 100%; }
-.other-domains-toggle { background: transparent; color: var(--kaspa); font-weight: 650; font-size: 12px; padding: 4px 0; display: inline-flex; align-items: center; gap: 4px; }
-.other-domains-chevron { display: inline-flex; transition: transform .15s; }
-.other-domains-chevron svg { width: 12px; height: 12px; }
-.other-domains-chevron.open { transform: rotate(90deg); }
-.other-domains-list { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
-.other-domain { display: flex; align-items: center; gap: 8px; width: 100%; background: transparent; color: var(--text); padding: 2px 0; text-align: left; font-weight: 400; }
-.other-domain:disabled { opacity: 1; cursor: default; background: transparent !important; color: var(--text) !important; }
 
 /* iOS menu-style Picker row: the value in accent with the up/down chevrons. */
 .menu-picker { position: relative; display: inline-flex; align-items: center; gap: 4px; color: var(--kaspa); max-width: 65%; }
@@ -581,7 +568,20 @@ button.domain-send { background: var(--kaspa); color: #000; border-radius: 999px
 .menu-picker select option { color: #fff; background: #2c2c2e; }
 .picker-row { cursor: pointer; }
 .form-bar .nav-back { position: static; }
-.underline-tabs + .form, .underline-tabs + .screen { padding-top: 16px; }
+
+/* K iOS PageCycleBar / CycleCapsuleButton (518fdc8c): the page switch inside a screen, leading,
+   accent border on a see-through accent fill; the title fades in as the page changes. */
+.page-cycle-bar { display: flex; padding: 4px 16px; flex-shrink: 0; }
+.cycle-button { display: inline-flex; align-items: center; gap: 8px; width: auto; padding: 9px 14px; border-radius: 999px; background: rgba(112,199,186,.12); border: 1.5px solid var(--kaspa); color: var(--kaspa); font-weight: 700; font-size: 14px; line-height: 1.1; }
+.cycle-button svg { flex: none; }
+.cycle-title { white-space: nowrap; }
+.cycle-title.fades { animation: cycle-fade .25s ease-in-out; }
+.cycle-dots { display: inline-flex; gap: 3px; }
+.cycle-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--kaspa); opacity: .3; }
+.cycle-dot.on { opacity: 1; }
+.cycle-count { font-size: 12px; font-weight: 600; opacity: .7; font-variant-numeric: tabular-nums; }
+@keyframes cycle-fade { from { opacity: 0; } to { opacity: 1; } }
+.page-cycle-bar + .form, .page-cycle-bar + .screen { padding-top: 12px; }
 
 /* The pencil sits 8 pt after the name, at the name's size (iOS pencil.circle.fill .title3). */
 .account-row button.plain { width: auto; height: auto; padding: 0; display: inline-flex; }
@@ -836,7 +836,7 @@ html:has(#app[data-screen="qr"]), body:has(#app[data-screen="qr"]) { background:
 /* iOS KachatAddressDomainsList */
 .kachat-address-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 24px 12px; }
 .kachat-address-empty p { margin: 0; }
-.manage-scroll > .address-tabs { margin: 0 -16px; padding: 0 16px; }
+.manage-scroll > .address-tabs { margin: 0 -16px; }
 .panel.full { height: 92%; }
 /* Testnet toggle: orange, as iOS tints it */
 .testnet-icon { display: inline-flex; color: #ff9f0a; }
@@ -1048,7 +1048,6 @@ button.kl-tile:not(:disabled), .kl-tile-split { cursor: pointer; }
 .kl-grace-line svg { width: 14px; height: 14px; flex: none; margin-top: 1px; }
 .kl-grace-copy { display: flex; flex-direction: column; gap: 2px; }
 .kl-grace-copy .kl-countdown { font-weight: 600; }
-.underline-tabs button { white-space: nowrap; }
 
 /* The Address Book (iOS 00767a4 / cda0d99 AddressBookView) */
 .ab-screen { display: flex; flex-direction: column; gap: 10px; padding: 4px 16px 16px; overflow-y: auto; flex: 1; }
@@ -1130,19 +1129,12 @@ button.kl-tile:not(:disabled), .kl-tile-split { cursor: pointer; }
 .req-memo { width: 100%; box-sizing: border-box; resize: vertical; background: transparent; border: 0; color: var(--text); font: inherit; outline: none; }
 .req-count { text-align: right; }
 .req-amount-row { display: flex; align-items: baseline; justify-content: center; gap: 8px; } .req-amount-row input { text-align: right; }
-/* An address's Domains tab (iOS fe52376) */
-.domains-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.domains-service { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 10px; border-radius: 16px; color: var(--text); font-weight: 400; }
-.domains-count { font-size: 20px; font-weight: 800; }
-.domains-back { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 8px; }
 /* Fund an address (iOS KachatAddressFundSheet / the zero-balance funding card) */
 .kl-fund { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 8px 0 12px; }
 .kl-fund-qr { width: 220px; height: 220px; border-radius: 12px; background: #fff; padding: 8px; }
 .kl-fund-address { background: transparent; color: var(--muted); overflow-wrap: anywhere; text-align: center; font-weight: 400; }
 .kl-fund-button { display: flex; width: fit-content; align-items: center; gap: 6px; margin-top: 8px; padding: 0; font-size: 14px; }
 .q-shield { display: inline-flex; vertical-align: -1px; margin-left: 5px; } .q-shield.q-safe { color: #30d158; } .q-shield.q-funded { color: #ff9f0a; } .q-shield.q-empty { color: #8e8e93; }
-.your-domains-grid .domains-service { gap: 4px; padding: 18px 10px 14px; }
-.domains-count-pill { margin-top: 4px; min-width: 28px; padding: 2px 10px; border-radius: 999px; background: var(--panel-2); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .kp-clear { color: #8e8e93; padding: 0 2px; flex: 0 0 auto; }
 /* ChangeNOW Swap (KaChat-Desktop Build 217) */
 .swap-root { display: flex; flex-direction: column; gap: 12px; }

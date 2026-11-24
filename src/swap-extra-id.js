@@ -1,4 +1,4 @@
-// Swap coins whose addresses carry an extra ID (XRP's destination tag, Algorand's memo). Without it
+// ChangeNOW answers checked (swapAnswerMatches), and swap coins whose addresses carry an extra ID (XRP's destination tag, Algorand's memo). Without it
 // a deposit into ChangeNOW's shared address can't be credited, and a payout to an exchange account
 // can't reach it. ChangeNOW's /v2/exchange/currencies marks them (hasExternalId for a deposit,
 // isExtraIdSupported for a payout); of the curated coins (shared/ui/swap-quote.js) these two are the
@@ -48,4 +48,25 @@ export function payoutExtraIdKept(sent, response) {
   const value = String(sent ?? "").trim();
   if (!value) return true;
   return String(response?.payoutExtraId ?? "").trim() === value;
+}
+
+/**
+ * Whether ChangeNOW created the exchange that was asked for (K iOS 518fdc8c answerMatches, audit
+ * 2026-11-24 #6): the same payout address (letter case aside: some networks write addresses either
+ * way), the same coins on the same networks where it names them, and a send amount within 1% of the
+ * one asked. The payout address must be in the answer. Its deposit address is shown only then.
+ */
+export function swapAnswerMatches(response, { from, to, amount, payoutAddress }) {
+  const same = (answered, asked) => {
+    const value = String(answered ?? "").trim();
+    return !value || value.toLowerCase() === String(asked ?? "").toLowerCase();
+  };
+  const payout = String(response?.payoutAddress ?? "").trim();
+  if (!payout || payout.toLowerCase() !== String(payoutAddress ?? "").trim().toLowerCase()) return false;
+  if (!same(response.fromCurrency, from?.ticker) || !same(response.toCurrency, to?.ticker)) return false;
+  if (!same(response.fromNetwork, from?.network) || !same(response.toNetwork, to?.network)) return false;
+  const sent = response.fromAmount == null || response.fromAmount === "" ? null : Number(response.fromAmount);
+  const asked = Number(amount);
+  if (sent != null && !(Number.isFinite(sent) && Math.abs(sent - asked) <= asked * 0.01)) return false;
+  return true;
 }
