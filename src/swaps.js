@@ -222,15 +222,15 @@ export async function showSwap({ coin = null, buying = false } = {}) {
     if (state.kasIsSendSide) { const kas = kusdtFromKasSompi(); return kas == null ? null : kasAmountLabel(kas); }
     return formatKusdt(kusdtFromUnits());
   };
-  /** Reads the Swap From address's KAS (its plain coins: kUSDT coins live at the token's own script
-   *  address, so they aren't counted). */
+  /** Reads the Swap From address's KAS: what it can spend now (K-Desktop d115548: covenant-bound,
+   *  held and just-spent coins can't go; kUSDT coins live at the token's own script address). */
   const refreshKusdtBalances = async () => {
     const address = isKusdt() ? kusdtTarget()?.address : null;
     if (!address) return;
     // the kUSDT side: what Manage kUSDT knows, looked up again when it's old
     kusdtHoldingsFresh().then(() => paintForm()).catch(() => {});
     let sompi = null;
-    try { sompi = (await wallet.balancesFor([address]))[address] ?? null; } catch { sompi = null; }
+    try { sompi = await wallet.spendableSompiAt(address); } catch { sompi = null; }
     if (sompi == null || kusdtTarget()?.address !== address) return;
     state.kusdtFromKas = { address, sompi };
     paintForm();
@@ -405,6 +405,8 @@ export async function showSwap({ coin = null, buying = false } = {}) {
       });
       const record = kusdtSwapRecord(done);
       noteKusdtSwap({ record, target, owner });
+      // the balances are read again once the trade has had a moment to land (K-Desktop d115548)
+      setTimeout(() => { if (handle?.isOpen()) refreshKusdtBalances(); }, 4500);
       toast(record?.text || "Swap sent");
       state.amountText = ""; state.receiveAmountText = ""; state.kusdtQuote = null;
       state.estimate = { status: "idle" };

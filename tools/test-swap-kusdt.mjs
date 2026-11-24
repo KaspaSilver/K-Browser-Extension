@@ -211,6 +211,9 @@ await check("Max on a kUSDT swap (K iOS 6b99c6dd): a buy keeps back 1.8 KAS, a s
   assert.match(swaps, /return kas > KAS_KEPT_FOR_BUY \? kas - KAS_KEPT_FOR_BUY : 0n;/, "never below zero");
   assert.match(swaps, /if \(!state\.kasIsSendSide\) return kusdtFromUnits\(\);/, "a sell: all the kUSDT");
   assert.match(swaps, /Max keeps \$\{kasAmountLabel\(KAS_KEPT_FOR_BUY\)\} back: \$\{kasAmountLabel\(KUSDT_TOKEN\.kasPerCoinSompi\)\} goes inside your new kUSDT coin, and up to \$\{kasAmountLabel\(FEE_KEPT_FOR_BUY\)\} pays the network fee\./);
+  // Available counts only what can go (K-Desktop d115548): no covenant-bound, held or just-spent coins
+  assert.match(swaps, /sompi = await wallet\.spendableSompiAt\(address\);/);
+  assert.match(read("src/wallet.js"), /return totalUtxoSompi\(excludeCovenantUtxos\(await spendableEntries\(address\)\)\);/);
   // only kUSDT swaps show Available and Max: a ChangeNOW coin is paid from elsewhere
   assert.match(swaps, /if \(!isKusdt\(\)\) return null;\n\s+if \(state\.kasIsSendSide\)/);
 });

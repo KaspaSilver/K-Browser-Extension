@@ -26,7 +26,7 @@ import {
 } from "../shared/engine/quantum.js";
 import { createRpc, probeRpc, disconnectRpc, getNodeRegistrySnapshot, forgetEndpoint, markBadNode, knownPublicNodes } from "../shared/engine/rpc.js";
 import { getEndpoint } from "../shared/engine/endpoints.js";
-import { getBalance, sendKaspa, sendMaxKaspa, estimateSendFeeDetail, estimateOnchainFeeDetail, estimateMaxSend, submitConfirmingAcceptance, SEND_OUTCOME_UNKNOWN, setReservedOutpoints, sanitizeUtxoEntries, excludeJustSpentUtxos, outpointKeysFrom } from "../shared/engine/transactions.js";
+import { getBalance, sendKaspa, sendMaxKaspa, estimateSendFeeDetail, estimateOnchainFeeDetail, estimateMaxSend, submitConfirmingAcceptance, SEND_OUTCOME_UNKNOWN, setReservedOutpoints, sanitizeUtxoEntries, excludeJustSpentUtxos, outpointKeysFrom, excludeCovenantUtxos, totalUtxoSompi } from "../shared/engine/transactions.js";
 import { checkedUtxoAnswer } from "../shared/engine/amounts.js";
 import { calculateMass, calculateFee, fetchQuotedFeeRateSompiPerGram } from "../shared/ui/kspt.js";
 import { looksLikeName, resolveEverywhere, primaryResolution, notFoundMessage, ownsAnyName } from "./names.js";
@@ -636,6 +636,13 @@ function withoutSpentEntries(entries, holds) {
 export async function outpointsAt(address) {
   const response = await withRpc(async (node) => checkedUtxoAnswer(await node.getUtxosByAddresses([address])));
   return outpointKeysFrom(sanitizeUtxoEntries(response?.entries)).map((key) => key.toLowerCase());
+}
+
+/** What `address` can spend now, in sompi (Swap's Available and Max on a kUSDT swap, K-Desktop
+ *  d115548 balancesOf): its plain coins less covenant-bound, held and just-spent ones. kUSDT coins
+ *  sit at the token's own script, so they aren't in it. */
+export async function spendableSompiAt(address) {
+  return totalUtxoSompi(excludeCovenantUtxos(await spendableEntries(address)));
 }
 
 /** The address's coins as node entries, less the held ones. */
