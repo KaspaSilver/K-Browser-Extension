@@ -110,6 +110,19 @@ export async function kusdtFromChoices() {
   return list.map((c) => ({ ...c, kasSompi: balances[c.address] ?? null }));
 }
 
+/** The kUSDT `address` holds, in units, as the kUSDT state knows it (K iOS 6b99c6dd kusdtFromUnits). */
+export function kusdtUnitsAt(address) {
+  const target = String(address || "").toLowerCase();
+  if (!target) return 0n;
+  return (kusdt().heldHoldings?.() || []).filter((h) => String(h.address).toLowerCase() === target).reduce((sum, h) => sum + BigInt(h.units ?? 0n), 0n);
+}
+
+/** The kUSDT state for the active account, looked up again when it's old (Swap's Available). */
+export async function kusdtHoldingsFresh() {
+  await syncKusdtAccount();
+  await kusdt().refreshIfStale?.();
+}
+
 /** The swap in that address's kUSDT history and a line in the bell (K iOS TrestlyTrade.recordSwap). */
 export function noteKusdtSwap({ record, target, owner }) {
   if (!record || !owner) return;

@@ -203,6 +203,18 @@ await check("kUSDT is a Swap coin, first in the picker", () => {
   assert.match(read("src/swaps.js"), /const out = \[\{ kind: "coin", coin: KUSDT_COIN \}\];/);
 });
 
+await check("Max on a kUSDT swap (K iOS 6b99c6dd): a buy keeps back 1.8 KAS, a sell spends all the kUSDT", () => {
+  const swaps = read("src/swaps.js");
+  assert.match(swaps, /const FEE_KEPT_FOR_BUY = 30_000_000n;/);
+  assert.match(swaps, /const KAS_KEPT_FOR_BUY = KUSDT_TOKEN\.kasPerCoinSompi \+ FEE_KEPT_FOR_BUY;/);
+  assert.equal(TR.kasAmountLabel(150_000_000n + 30_000_000n), "1.8 KAS");
+  assert.match(swaps, /return kas > KAS_KEPT_FOR_BUY \? kas - KAS_KEPT_FOR_BUY : 0n;/, "never below zero");
+  assert.match(swaps, /if \(!state\.kasIsSendSide\) return kusdtFromUnits\(\);/, "a sell: all the kUSDT");
+  assert.match(swaps, /Max keeps \$\{kasAmountLabel\(KAS_KEPT_FOR_BUY\)\} back: \$\{kasAmountLabel\(KUSDT_TOKEN\.kasPerCoinSompi\)\} goes inside your new kUSDT coin, and up to \$\{kasAmountLabel\(FEE_KEPT_FOR_BUY\)\} pays the network fee\./);
+  // only kUSDT swaps show Available and Max: a ChangeNOW coin is paid from elsewhere
+  assert.match(swaps, /if \(!isKusdt\(\)\) return null;\n\s+if \(state\.kasIsSendSide\)/);
+});
+
 if (failures.length) {
   console.error(failures.join("\n\n"));
   console.error(`swap kusdt: ${passed} passed, ${failures.length} failed`);

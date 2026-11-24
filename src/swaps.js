@@ -36,9 +36,9 @@ import {
   quoteKusdtSwap, kusdtSwapAmountIn, kusdtQuoteText, kusdtRateText, minimumOut, swapRecord as kusdtSwapRecord, TRADE_CODE,
   tradeUnits, kasAmountLabel,
 } from "../shared/engine/kusdt-trade.js";
-import { formatKusdt } from "../shared/engine/kusdt.js";
+import { formatKusdt, typedKusdt, KUSDT_TOKEN } from "../shared/engine/kusdt.js";
 import { approvalRows, approvalWarnings, approvalBlocked, APPROVE_ARM_MS, APPROVAL_TEXT } from "../shared/ui/swap-approval.js";
-import { swapTrade, runKusdtSwap, kusdtFromChoices, noteKusdtSwap, trestlyTermsUrl } from "./swap-kusdt.js";
+import { swapTrade, runKusdtSwap, kusdtFromChoices, noteKusdtSwap, trestlyTermsUrl, kusdtUnitsAt, kusdtHoldingsFresh } from "./swap-kusdt.js";
 import { extraIdName, checkPayoutExtraId, withPayoutExtraId, payoutExtraIdKept, swapAnswerMatches } from "./swap-extra-id.js";
 
 const RELAY_ORIGIN = "https://desktop.kachat.app";
@@ -66,6 +66,19 @@ const AGREEMENTS = Object.freeze({
     checkbox: "I understand Trestly is a third party, not K, and I agree to Trestly's Terms of Service.",
   },
 });
+/** What a KAS-for-kUSDT buy keeps back (K iOS 6b99c6dd SwapService.kasKeptForBuy), exactly as
+ *  Trestly's pool works out its own max (`maxKasIn` in kusdt-wallet.js): the KAS locked in the new
+ *  kUSDT coin (1.5 KAS) and FEE_KEEP (0.3 KAS) for the network fee. Less, and the pool refuses a
+ *  Max buy. */
+const FEE_KEPT_FOR_BUY = 30_000_000n;
+const KAS_KEPT_FOR_BUY = KUSDT_TOKEN.kasPerCoinSompi + FEE_KEPT_FOR_BUY;
+const MAX_KEEPS_NOTE = `Max keeps ${kasAmountLabel(KAS_KEPT_FOR_BUY)} back: ${kasAmountLabel(KUSDT_TOKEN.kasPerCoinSompi)} goes inside your new kUSDT coin, and up to ${kasAmountLabel(FEE_KEPT_FOR_BUY)} pays the network fee.`;
+/** "12.5" for an exact sompi amount, as typed. */
+const typedKas = (sompi) => {
+  const whole = sompi / 100_000_000n;
+  const frac = String(sompi % 100_000_000n).padStart(8, "0").replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : String(whole);
+};
 const COIN_LOGOS = new Set(["btc", "eth", "sol", "xrp", "bnb", "trx", "hype", "doge", "ltc", "ada", "bch", "etc", "usdc", "usdt", "zec", "xmr"]);
 
 const FLIP = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 20V4M4 8l4-4 4 4"/><path d="M16 4v16M12 16l4 4 4-4"/></svg>';
@@ -124,6 +137,7 @@ export async function showSwap({ coin = null, buying = false } = {}) {
     create: { status: "idle", result: null },
     kusdtFrom: null,          // { label, address, spendingIndex }: the Chatting Address unless picked
     kusdtQuote: null,         // { quote, amountIn, buying, address }: what Swap's Swap approves
+    kusdtFromKas: null,       // { address, sompi }: the Swap From address's KAS (K iOS 6b99c6dd)
     history: (() => { const h = read(HISTORY_KEY, []); return Array.isArray(h) ? h : []; })(),
   };
   state.history.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
@@ -188,6 +202,48 @@ export async function showSwap({ coin = null, buying = false } = {}) {
       paintForm();
     }, 500);
   };
+  // --- Available and Max on a kUSDT swap (K iOS 6b99c6dd): a kUSDT swap spends what K holds ---
+  /** The Swap From address's kUSDT, in units. */
+  const kusdtFromUnits = () => kusdtUnitsAt(kusdtTarget()?.address);
+  /** The Swap From address's KAS, or null until read. */
+  const kusdtFromKasSompi = () => (state.kusdtFromKas && state.kusdtFromKas.address === kusdtTarget()?.address ? state.kusdtFromKas.sompi : null);
+  /** The most "You Send" can be: the address's kUSDT on a sell, its KAS less what a buy keeps back.
+   *  null when it isn't known (or this isn't a kUSDT swap). */
+  const kusdtMaxSend = () => {
+    if (!isKusdt()) return null;
+    if (!state.kasIsSendSide) return kusdtFromUnits();
+    const kas = kusdtFromKasSompi();
+    if (kas == null) return null;
+    return kas > KAS_KEPT_FOR_BUY ? kas - KAS_KEPT_FOR_BUY : 0n;
+  };
+  /** "Available" beside You Send: KAS on a buy, kUSDT on a sell. */
+  const kusdtAvailableText = () => {
+    if (!isKusdt()) return null;
+    if (state.kasIsSendSide) { const kas = kusdtFromKasSompi(); return kas == null ? null : kasAmountLabel(kas); }
+    return formatKusdt(kusdtFromUnits());
+  };
+  /** Reads the Swap From address's KAS (its plain coins: kUSDT coins live at the token's own script
+   *  address, so they aren't counted). */
+  const refreshKusdtBalances = async () => {
+    const address = isKusdt() ? kusdtTarget()?.address : null;
+    if (!address) return;
+    // the kUSDT side: what Manage kUSDT knows, looked up again when it's old
+    kusdtHoldingsFresh().then(() => paintForm()).catch(() => {});
+    let sompi = null;
+    try { sompi = (await wallet.balancesFor([address]))[address] ?? null; } catch { sompi = null; }
+    if (sompi == null || kusdtTarget()?.address !== address) return;
+    state.kusdtFromKas = { address, sompi };
+    paintForm();
+  };
+  /** Max: "You Send" becomes all that can go. */
+  const setMaxAmount = () => {
+    const max = kusdtMaxSend();
+    if (max == null || max <= 0n) return;
+    state.amountText = state.kasIsSendSide ? typedKas(max) : typedKusdt(max);
+    state.editedSide = "send";
+    reschedule();
+  };
+
   /** kUSDT (iOS rescheduleKusdtEstimate): Trestly's `prepare` for what was typed (nothing signed, no
    *  key), with no minimum, so the pool's own quote lands in "You Get". A paused pool or its circuit
    *  breaker says so instead. */
@@ -227,6 +283,7 @@ export async function showSwap({ coin = null, buying = false } = {}) {
     else if (isKusdt() && state.editedSide === "get") { state.amountText = ""; state.editedSide = "send"; }
     clearQuoted();
     reschedule();
+    refreshKusdtBalances();
   };
   /** The created exchange's deposit card goes once the coin or direction changes: it belongs to
    *  the exchange made (K iOS clearCreatedSwap, audit 2026-11-24 #2). */
@@ -426,12 +483,13 @@ export async function showSwap({ coin = null, buying = false } = {}) {
   // --- rendering ---
   /** A card that isn't `editable` shows the quote (kUSDT's You Get: the pool quotes from what you
    *  send). */
-  const amountCard = ({ label, coin, value, field, quoting, editable = true }) => `
+  const amountCard = ({ label, coin, value, field, quoting, editable = true, available = null, max = false }) => `
     <div class="sk-card swap-card">
-      <div class="sk-label">${esc(label)}</div>
+      <div class="swap-card-head"><span class="sk-label">${esc(label)}</span>${available ? `<span class="muted tiny swap-available">Available: ${esc(available)}</span>` : ""}</div>
       <div class="swap-card-row">
         ${quoting ? '<span class="swap-quoting"><span class="spinner small-spin"></span></span>'
           : `<input class="swap-amount" type="text" inputmode="decimal" placeholder="0.00" aria-label="${esc(label)}" data-swap-field="${field}" value="${esc(value)}" autocomplete="off"${editable ? "" : ' readonly tabindex="-1"'} />`}
+        ${max ? '<button type="button" class="bar-text accent strong swap-max" data-swap-max>Max</button>' : ""}
         ${coin.ticker === "kas"
           ? `<span class="swap-badge">${coinIcon(coin)}<span>${esc(coin.displayName)}</span></span>`
           : `<button type="button" class="swap-badge pickable" data-swap-pick>${coinIcon(coin)}<span>${esc(coin.displayName)}</span>${CHEVRON_DOWN}</button>`}
@@ -468,7 +526,8 @@ export async function showSwap({ coin = null, buying = false } = {}) {
     const canSwap = state.estimate.status === "success" && !busy && (!kusdt || state.kusdtQuote != null);
     const target = kusdt ? kusdtTarget() : null;
     return `
-      ${amountCard({ label: "You Send", coin: fromCoin(), value: state.amountText, field: "send", quoting: state.editedSide === "get" && loading })}
+      ${amountCard({ label: "You Send", coin: fromCoin(), value: state.amountText, field: "send", quoting: state.editedSide === "get" && loading, available: kusdtAvailableText(), max: (kusdtMaxSend() ?? 0n) > 0n })}
+      ${kusdt && state.kasIsSendSide ? `<p class="muted tiny swap-max-note">${esc(MAX_KEEPS_NOTE)}</p>` : ""}
       <div class="swap-actions-row">
         <button class="icon plain accent swap-flip" data-swap-flip aria-label="Switch direction" title="Switch direction">${FLIP}</button>
         <button class="swap-go" data-swap-create ${canSwap ? "" : "disabled"}>${busy ? '<span class="spinner small-spin"></span>' : kusdt ? "Swap" : "Get Deposit Address"}</button>
@@ -663,6 +722,7 @@ export async function showSwap({ coin = null, buying = false } = {}) {
         onClick: () => {
           state.kusdtFrom = c.spendingIndex == null ? null : { label: c.label, address: c.address, spendingIndex: c.spendingIndex };
           reschedule();
+          refreshKusdtBalances();
         },
       })),
     });
@@ -789,8 +849,10 @@ export async function showSwap({ coin = null, buying = false } = {}) {
       // kUSDT quotes from what is sent, in that coin's units: the figure typed for the other coin goes
       if (isKusdt()) { state.amountText = ""; state.receiveAmountText = ""; state.editedSide = "send"; }
       reschedule();
+      refreshKusdtBalances();
       return;
     }
+    if (t.closest("[data-swap-max]")) { setMaxAmount(); return; }
     if (t.closest("[data-swap-pick-kusdt]")) { setOtherCoin(KUSDT_COIN); paint(); return; }
     if (t.closest("[data-swap-kusdt-from]")) { openKusdtFromPicker(); return; }
     if (t.closest("[data-swap-create]")) { execute(); return; }
@@ -823,6 +885,7 @@ export async function showSwap({ coin = null, buying = false } = {}) {
     if (copyExtraId) copyExtra(copyExtraId);
   });
   paint();
+  refreshKusdtBalances();
   wallet.nextSwapPayoutAddress().then((next) => { state.nextPayout = next; paintForm(); }).catch(() => {});
   probe();
 }
