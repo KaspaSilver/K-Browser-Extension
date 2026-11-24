@@ -38,7 +38,8 @@ as K on iPhone and KaChat on Android and desktop.
   generate, discover, rename, hide and set the primary
 - History, coins (UTXOs) and Compound for every address
 - kUSDT, the dollar stablecoin on Kaspa bridged by Trestly: balances, send and receive it, combine
-  its coins, and open Trestly's site
+  its coins, swap KAS and kUSDT through Trestly's pool (you approve each swap), and open Trestly's
+  site
 - Contacts: save the people you pay by address or name
 - Your Usernames: your .kachat names, and claim one
 - Cold Storage: watch a KasSigner account by its kpub and send from it by signing on the device -
@@ -80,15 +81,13 @@ signatures with the user's approval.
   the public Kaspa node resolver and nodes, for balances and sending transactions.
 - Host permission `api-tn10.kaspa.org` - the testnet-10 REST API, used only when the user turns on
   Testnet in Settings.
-- Host permission `api.knsdomains.org` - Kaspa Name Service, only to finish a .kas domain transfer
-  started by an earlier version whose second transaction never went out: it checks whether the
-  domain already reached its recipient. The request carries that domain's name.
 - Host permission `api.coingecko.com` - the Kaspa price in the user's currency and the
   Portfolio's price history.
 - Host permissions `api.gateio.ws`, `query1.finance.yahoo.com` - Portfolio: long-range KAS price
   history (fallback) and the comparison charts (VOO, gold, silver).
 - Host permissions `api.trestly.io`, `testnet.trestly.io` - Trestly's kUSDT API: the kUSDT coins
-  the user's own addresses hold (each checked on a Kaspa node before it counts).
+  the user's own addresses hold (each checked on a Kaspa node before it counts), and the pool's
+  state when the user swaps KAS and kUSDT.
 - Content scripts on `https://*/*` (and localhost) - provide `window.kachat`, the interface Kaspa
   websites use to ask the wallet for a connection, payment or signature. The scripts only relay
   those requests; they do not read or change page content, and the wallet uses this access for
@@ -99,9 +98,10 @@ signatures with the user's approval.
     another coin; the user pays the ChangeNOW deposit address themselves);
   - a custom Kaspa REST API or .kachat names indexer the user types into Settings.
 
-**Remote code:** No. All code, including the Kaspa WebAssembly module and kUSDT's transaction
-builder (a WebAssembly module checked against its pinned SHA-256 before it compiles), is in the
-package. (`wasm-unsafe-eval` in the CSP lets the bundled WebAssembly compile; nothing is fetched
+**Remote code:** No. All code, including the Kaspa WebAssembly module, kUSDT's transaction
+builder (a WebAssembly module checked against its pinned SHA-256 before it compiles) and
+Trestly's pool code for KAS/kUSDT swaps (a pinned JavaScript file, run in its own worker, which may
+reach only Trestly's API and the public Kaspa nodes), is in the package. (`wasm-unsafe-eval` in the CSP lets the bundled WebAssembly compile; nothing is fetched
 and run.)
 
 **Data usage:** tick "Financial and payment information" (public blockchain addresses) only.

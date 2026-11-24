@@ -405,11 +405,8 @@ function paintHome() {
   $("#send").onclick = () => { if (main) openWalletSend({ kaspaTotalSompi: totalSompi, onKaspa: sendKaspa, onBack: back }); };
   $("#receive").onclick = () => openReceive(back);
   $("#request").onclick = () => showRequestPayment();
-  // Swap Stablecoins (K iOS, K-Desktop): kUSDT on Trestly's site; ChangeNOW Swap (KaChat-Desktop
-  // Build 217) for other coins stays under it
-  // Swap (K iOS 518fdc8c, owner 2026-11-23: it replaced Swap Stablecoins): the swap screen itself.
-  // K iOS also swaps KAS and kUSDT there through Trestly's pool; that waits for K-Desktop's engine,
-  // so here kUSDT is reached from Manage kUSDT's Open Trestly and Send kUSDT's Swap Stablecoins.
+  // Swap (K iOS 518fdc8c, owner 2026-11-23: it replaced Swap Stablecoins): the swap screen itself,
+  // ChangeNOW for coins on other networks and kUSDT through Trestly's pool (K-Desktop d570abd).
   $("#swap").onclick = () => import("./swaps.js").then((m) => m.showSwap());
   $("#kusdt-card").onclick = openKusdtManage;
   for (const pill of document.querySelectorAll("[data-card-pill]")) pill.onclick = () => setWalletCardPage(Number(pill.dataset.cardPill));

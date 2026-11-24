@@ -1160,7 +1160,20 @@ button.kl-tile:not(:disabled), .kl-tile-split { cursor: pointer; }
 .swap-history-row { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; border-radius: 14px; color: var(--text); text-align: left; }
 .swap-disclaimer { display: flex; flex-direction: column; gap: 10px; }
 .swap-terms { display: flex; align-items: flex-start; gap: 8px; }
+.swap-terms input[type="checkbox"] { width: 18px; height: 18px; flex: none; margin: 1px 0 0; padding: 0; accent-color: var(--kaspa); }
+.swap-terms > span { flex: 1; min-width: 0; }
 .swap-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 24px 12px; }
+/* K 5.4: both agreements before Swap, kUSDT's coin, Swap From and the approval (K iOS 518fdc8c) */
+.swap-agreements { display: flex; flex-direction: column; gap: 12px; }
+.swap-agreement-head { display: flex; align-items: center; gap: 12px; }
+.swap-agreement-icon svg { width: 30px; height: 30px; }
+.swap-coin-kusdt { display: inline-flex; border-radius: 0; }
+.swap-approval { display: flex; flex-direction: column; gap: 12px; }
+.swap-approval p { margin: 0; line-height: 1.4; }
+.swap-approval-head { display: flex; align-items: center; gap: 12px; }
+.swap-approval-card { display: flex; flex-direction: column; gap: 8px; }
+.swap-approval-card hr { border: 0; border-top: .8px solid var(--line); margin: 2px 0; width: 100%; }
+.swap-approval .sk-from-row > :last-child { text-align: right; }
 .swap-coins { display: flex; flex-direction: column; margin-top: 10px; }
 .swap-coin-row { display: flex; align-items: center; gap: 10px; padding: 11px 6px; background: transparent; color: var(--text); border-bottom: 1px solid var(--hairline, rgba(255,255,255,.06)); text-align: left; border-radius: 0; }
 .swap-coin-row.indented { padding-left: 34px; }

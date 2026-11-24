@@ -1,11 +1,9 @@
 // What a send checks before it's built (src/send-guards.js): the reviewed source against the key the
 // vault gives now, the Max pin against what the review shows, Cold Storage's no-change recipient
-// output against the storage-mass budget, and which unfinished .kas transfers are tried again (KaPay
-// iOS 2da5f4b). Run: node tools/test-send-guards.mjs
+// output against the storage-mass budget. Run: node tools/test-send-guards.mjs
 import assert from "node:assert/strict";
 import {
   SOURCE_CHANGED, SOURCE_CHANGED_MESSAGE, sourceChangedError, selectionKey, maxPinCurrent, coldRecipientMassError,
-  revealsToRetry, commitIsLive, REVEAL_RETRY_MAX_AGE_MS, REVEAL_RETRY_SETTLE_MS,
 } from "../src/send-guards.js";
 import { planSendOutputs, SMALL_SEND_MASS_MESSAGE } from "../shared/ui/kspt.js";
 
@@ -45,37 +43,6 @@ check("a Max pin holds only for the address, fee and coin pick it was worked out
   assert.equal(maxPinCurrent(null, { sourceAddress: A, totalFeeSompi: 1_000n, selection: null }), false);
   assert.equal(maxPinCurrent({ ...pin, outpoints: null }, { sourceAddress: A, totalFeeSompi: 1_000n, selection: null }), false);
 });
-// A .kas transfer whose reveal never went out, retried for an hour (KaPay iOS 2da5f4b KNSRevealRecovery)
-const NOW = 2_000_000_000_000;
-const filed = (over = {}) => ({ assetId: "asset", source: { accountId: "A" }, createdAt: NOW - 600_000, updatedAt: NOW - 600_000, commitTxId: "CC", commitAmountSompi: "200000000", ...over });
-const retried = (records, inFlow = new Set()) => revealsToRetry(records, { accountId: "A", inFlow, now: NOW }).map((r) => r.assetId);
-check("a commit left without a reveal is retried for this account, within the hour", () => {
-  assert.equal(REVEAL_RETRY_MAX_AGE_MS, 3_600_000);
-  assert.deepEqual(retried([filed()]), ["asset"]);
-  assert.deepEqual(retried([filed({ source: null })]), ["asset"]);
-  assert.deepEqual(retried([filed({ source: { accountId: "B" } })]), []);
-});
-check("past the hour it's left to Finish Transfer", () => {
-  assert.deepEqual(retried([filed({ createdAt: NOW - REVEAL_RETRY_MAX_AGE_MS })]), ["asset"]);
-  assert.deepEqual(retried([filed({ createdAt: NOW - REVEAL_RETRY_MAX_AGE_MS - 1 })]), []);
-  assert.deepEqual(retried([filed({ createdAt: undefined, updatedAt: undefined })]), []);
-});
-check("a transfer running here, or just touched by another window, does its own reveal", () => {
-  assert.deepEqual(retried([filed()], new Set(["asset"])), []);
-  assert.deepEqual(retried([filed({ updatedAt: NOW - REVEAL_RETRY_SETTLE_MS + 1 })]), []);
-  assert.deepEqual(retried([filed({ updatedAt: NOW - REVEAL_RETRY_SETTLE_MS })]), ["asset"]);
-});
-check("a commit is live only while the node lists its output", () => {
-  const entry = (transactionId, amount) => ({ outpoint: { transactionId, index: 0 }, amount });
-  assert.equal(commitIsLive(filed(), [entry("cc", 200_000_000n)]), true);
-  assert.equal(commitIsLive(filed(), [entry("dd", 200_000_000n)]), false);
-  assert.equal(commitIsLive(filed(), []), false);
-  assert.equal(commitIsLive(filed(), undefined), false);
-  // its answer was lost, so no txid was recorded: the amount says which it is
-  assert.equal(commitIsLive(filed({ commitTxId: null }), [entry("dd", 200_000_000n)]), true);
-  assert.equal(commitIsLive(filed({ commitTxId: null }), [entry("dd", 5n)]), false);
-});
-
 // Cold Storage's no-change path (KaPay iOS 0799cec KaChatTransactionBuilder: the recipient's output
 // alone must fit the storage-mass budget)
 const P2PK = { version: 0, scriptHex: `20${"ab".repeat(32)}ac` };

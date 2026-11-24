@@ -42,39 +42,6 @@ export function maxPinCurrent(pin, { sourceAddress, totalFeeSompi, selection }) 
     && pin.selectionKey === selectionKey(selection);
 }
 
-// A .kas transfer whose reveal never went out (iOS KNSRevealRecovery, KaPay iOS 2da5f4b): tried
-// again whenever the wallet is open, for an hour after its commit was filed. Doing what was asked
-// long after it was seen to fail would be a surprise; Your Domains' Finish Transfer stays after that.
-export const REVEAL_RETRY_MAX_AGE_MS = 3_600_000;
-// A record touched this recently may be another KaPay window's transfer, still running.
-export const REVEAL_RETRY_SETTLE_MS = 120_000;
-
-/** The pending .kas transfers (shared/engine/kns-write.js records) to retry now: this account's, within
- *  the hour, not running here (`inFlow`: asset ids) and not just touched by another window. */
-export function revealsToRetry(records, { accountId, inFlow = new Set(), now = Date.now() } = {}) {
-  return (records || []).filter((record) => {
-    const created = Number(record?.createdAt);
-    const touched = Number(record?.updatedAt ?? created);
-    if (!record?.assetId || inFlow.has(record.assetId)) return false;
-    if (record.source?.accountId && record.source.accountId !== accountId) return false;
-    if (!Number.isFinite(created) || now - created > REVEAL_RETRY_MAX_AGE_MS) return false;
-    return !Number.isFinite(touched) || now - touched >= REVEAL_RETRY_SETTLE_MS;
-  });
-}
-
-/** Whether the record's commit is sitting unspent in these node entries (its commit address's). An
- *  empty answer means not landed yet, or already spent by its reveal: either way nothing to send.
- *  A commit whose answer was lost has no txid on record: the amount says which it is. */
-export function commitIsLive(record, entries) {
-  const txid = String(record?.commitTxId || "").toLowerCase();
-  let amount = null;
-  try { amount = record?.commitAmountSompi != null ? BigInt(record.commitAmountSompi) : null; } catch { amount = null; }
-  return (entries || []).some((entry) => {
-    if (txid) return String(entry?.outpoint?.transactionId || "").toLowerCase() === txid;
-    return amount != null && BigInt(entry?.amount ?? 0) === amount;
-  });
-}
-
 /**
  * Cold Storage's no-change path (KaPay iOS 0799cec, KaChatTransactionBuilder
  * fitsStorageMass(inputAmounts:outputAmounts:[amount])): an unsigned transaction built with no change

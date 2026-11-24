@@ -3,14 +3,16 @@
 // tap-to-send review of Send Kaspa (send-steps.js), Manage Addresses' rows and floating button,
 // the receive screens' white QR card, the half sheets and alerts (ui.js).
 //
-//   the Wallet tab's kUSDT card (on the card pager beside Kaspa's), Swap Stablecoins, Send's
+//   the Wallet tab's kUSDT card (on the card pager beside Kaspa's), Send's
 //   "What are you sending?", Send kUSDT (To / From / How much / Review) with Fund This Address,
 //   Combine Coins, Manage kUSDT (its row menu, kUSDT Actions, kUSDT Address Visibility), an
 //   address's page and history, About kUSDT, Receive kUSDT and the kUSDT Guide.
 //
-// As on Desktop (owner, 2026-11-20): Swap Stablecoins opens Trestly's swap page in a new tab - a
-// browser page can't hand a wallet to Trestly's site - so there's no connect or approval sheet and
-// no Swapped / Bridged rows. Chat-only parts (Send Dollars, tips, payment notices) aren't here.
+// As on Desktop (owner, 2026-11-20): Trestly's site isn't shown inside K (a browser page can't
+// hand a wallet to it), so there's no connect sheet and no Bridged rows; Manage kUSDT's Open
+// Trestly opens it in a new tab. Swapping KAS and kUSDT is the Wallet's Swap (K iOS 518fdc8c,
+// K-Desktop d570abd: swaps.js with Trestly's pool code run by K), and Send kUSDT's "None held"
+// opens it with kUSDT picked. Chat-only parts (Send Dollars, tips, payment notices) aren't here.
 //
 // Nothing here asks for the password: plain sends need none (KaPay iOS 5848fb0). Every build, read
 // and send is tied to the account it started on; an answer after a switch is dropped.
@@ -77,11 +79,9 @@ export const KUSDT_TEXT = Object.freeze({
   risk: "Not independently audited yet. Hold only what you can afford to lose.",
   aboutCoin: "Every kUSDT coin holds 1.5 KAS. It goes along with the kUSDT when you send it.",
   emptyTitle: "No kUSDT Yet",
-  emptyText: "Receive it on a fresh address, or get some on Trestly with Open Trestly above.",
+  emptyText: "Receive it on a fresh address, or swap KAS for it with Swap on the Wallet tab.",
   historyEmpty: "No kUSDT activity yet.",
   historyEmptyNote: "Sends, receives and combines in this browser show here from now on.",
-  swapRowSubtitle: "On Trestly's site, in a new tab",
-  swapFooter: "More stablecoins will show here as K adds them.",
   visibilityEmptyPage: "These addresses couldn't be derived right now. Go back a page or reopen this screen to retry.",
 });
 
@@ -165,20 +165,12 @@ export function watchKusdtCard(onChange) {
   return () => cardListeners.delete(onChange);
 }
 
-// --- §2 Swap Stablecoins -----------------------------------------------------------------------
+// --- §2 Swap (K 5.4: the Wallet's Swap button, swaps.js; Swap Stablecoins went) ----------------
 
-/** "Which stablecoin?", then Trestly's swap page in a new tab (K-Desktop, owner 2026-11-20): Send
- *  kUSDT's way to get some when none of your addresses holds any (K iOS TokenSendView keeps it). */
-export function openSwapStablecoins() {
-  showSheet({
-    title: "Swap Stablecoins",
-    headerHtml: '<div class="kusdt-sheet-question">Which stablecoin?</div>',
-    cancel: false,
-    rows: [
-      { label: SYMBOL, subtitle: KUSDT_TEXT.swapRowSubtitle, icon: kusdtCoinIconHtml(36), onClick: () => openExternal(`${kusdtDeployment(NETWORK).siteUrl}/swap`) },
-    ],
-    footerHtml: `<p class="muted small kusdt-sheet-footer">${esc(KUSDT_TEXT.swapFooter)}</p>`,
-  });
+/** Swap with kUSDT picked, buying it with KAS (K-Desktop d570abd openKusdtSwap): Send kUSDT's way
+ *  to get some when none of your addresses holds any. */
+export function openKusdtSwap() {
+  import("./swaps.js").then((m) => m.showSwap({ coin: "kusdt", buying: true }));
 }
 
 // --- §3 Send's asset chooser -------------------------------------------------------------------
@@ -353,7 +345,7 @@ export function openKusdtSend({ startFrom = null, recipient = null, recipientNam
       return w.discovering || w.refreshing || !w.known
         ? `<div class="kusdt-from-empty">${spinnerLine(KUSDT_TEXT.fromChecking)}</div>`
         : `<div class="kusdt-from-empty"><p class="muted">${esc(KUSDT_TEXT.fromNone)}</p>
-            <button type="button" class="ios-capsule with-icon" id="kusdt-from-swap">${KUSDT_ICONS.dollarCircle}<span>Swap Stablecoins</span></button></div>`;
+            <button type="button" class="ios-capsule with-icon" id="kusdt-from-swap">${KUSDT_ICONS.dollarCircle}<span>Swap for kUSDT</span></button></div>`;
     }
     return `<div class="glass list">${list.map((h) => {
       const on = selected?.id === h.id;
@@ -380,7 +372,7 @@ export function openKusdtSend({ startFrom = null, recipient = null, recipientNam
   function bindFrom() {
     const box = handle?.el?.querySelector("#kusdt-from-list");
     if (!box) return;
-    box.querySelector("#kusdt-from-swap")?.addEventListener("click", () => openSwapStablecoins());
+    box.querySelector("#kusdt-from-swap")?.addEventListener("click", () => openKusdtSwap());
     for (const row of box.querySelectorAll("[data-from]")) {
       row.onclick = () => {
         if (S.sending) return;
@@ -1193,7 +1185,7 @@ const GUIDE_CARDS = [
   { icon: "arrowUp", title: "Sending kUSDT", detail: "A send takes a little KAS from the same address for the network fee, plus 1.5 KAS for your change coin when you keep some kUSDT. If the address is short, Fund This Address tops it up from another of your addresses." },
   { icon: "merge", title: "Combine Coins", detail: "Each payment you receive is its own coin with its own 1.5 KAS. Combine Coins, in an address's menu, merges them into one and gives the extra KAS back." },
   // the K-Desktop wording (owner, 2026-11-20): Trestly's own site, in a new tab
-  { icon: "swap", title: "Swapping", detail: "To swap KAS and kUSDT, or add to the pool, click Open Trestly in Manage kUSDT. Trestly's own site opens in a new tab: connect a wallet there, then send what you swapped to one of your addresses here." },
+  { icon: "swap", title: "Swapping", detail: "To swap KAS and kUSDT, click Swap on the Wallet tab and choose kUSDT (Kaspa). K trades it through Trestly's pool with Trestly's own code, and asks you to approve each swap before anything is signed. To add to the pool, click Open Trestly in Manage kUSDT." },
   { icon: "clock", title: "History", detail: "kUSDT history is kept in this browser: sends, combines and payments received from now on. What happened before, or in another app, isn't shown." },
   { icon: "warning", title: "The Risks", detail: KUSDT_TEXT.risk, tone: "warn" },
 ];

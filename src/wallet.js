@@ -26,20 +26,20 @@ import {
 } from "../shared/engine/quantum.js";
 import { createRpc, probeRpc, disconnectRpc, getNodeRegistrySnapshot, forgetEndpoint, markBadNode, knownPublicNodes } from "../shared/engine/rpc.js";
 import { getEndpoint } from "../shared/engine/endpoints.js";
-import { getBalance, sendKaspa, sendMaxKaspa, estimateSendFeeDetail, estimateOnchainFeeDetail, estimateMaxSend, submitConfirmingAcceptance, SEND_OUTCOME_UNKNOWN, setReservedOutpoints, sanitizeUtxoEntries, excludeJustSpentUtxos } from "../shared/engine/transactions.js";
+import { getBalance, sendKaspa, sendMaxKaspa, estimateSendFeeDetail, estimateOnchainFeeDetail, estimateMaxSend, submitConfirmingAcceptance, SEND_OUTCOME_UNKNOWN, setReservedOutpoints, sanitizeUtxoEntries, excludeJustSpentUtxos, outpointKeysFrom } from "../shared/engine/transactions.js";
 import { checkedUtxoAnswer } from "../shared/engine/amounts.js";
 import { calculateMass, calculateFee, fetchQuotedFeeRateSompiPerGram } from "../shared/ui/kspt.js";
 import { looksLikeName, resolveEverywhere, primaryResolution, notFoundMessage, ownsAnyName } from "./names.js";
 import { fetchKasPrice, peekKasPrice } from "../shared/engine/prices.js";
 import { transactionBelongsInHistory } from "../shared/engine/sync.js";
-import { setKnsPendingStorage, listPendingKnsTransfers, resumeKnsTransfer, clearPendingKnsTransfer } from "../shared/engine/kns-write.js";
+import { setKnsPendingStorage, listPendingKnsTransfers, resumeKnsTransfer } from "../shared/engine/kns-reveal-recovery.js";
 import { getLocal, setLocal, removeLocal, getSession, setSession, localArea } from "./browser.js";
 import { reencodeAddress } from "../shared/engine/network.js";
 import { IS_TESTNET, NETWORK as ACTIVE_NETWORK, NETWORK_ID, ADDRESS_PREFIX, KAS_UNIT, netKey, MAINNET_REST, TESTNET_REST, isValidKaspaAddress, networkOfAddress } from "./net.js";
 import { addressShapeOk, lowercasedKaspaAddress } from "./address-rules.js";
 import { activeAccountSecrets, accountSecretsById, ACCOUNT_IDS_KEY } from "./vault.js";
 import { sompiFromUserText } from "./amounts.js";
-import { sourceChangedError, SOURCE_CHANGED, revealsToRetry, commitIsLive } from "./send-guards.js";
+import { sourceChangedError, SOURCE_CHANGED } from "./send-guards.js";
 import { shownAccount, SWITCHED_ELSEWHERE } from "./account-scope.js";
 import {
   HELD_COINS_MESSAGE, liveHolds, mergeHolds, holdSpentCoins, heldKeys, heldCountAt, nextHoldExpiry, withoutHeldCoins,
@@ -629,6 +629,13 @@ export async function holdSubmittedCoins(keys, address) {
  *  engine itself noted after a submit in this page (a .kas commit, a .kachat combine). */
 function withoutSpentEntries(entries, holds) {
   return excludeJustSpentUtxos(withoutHeldCoins(entries, holds));
+}
+
+/** Every coin the node lists at `address`, as "txid:index", held-back ones included (Swap's kUSDT
+ *  trade, K-Desktop d570abd outpointsOf: a may-have-gone-out hold ends once one of these is gone). */
+export async function outpointsAt(address) {
+  const response = await withRpc(async (node) => checkedUtxoAnswer(await node.getUtxosByAddresses([address])));
+  return outpointKeysFrom(sanitizeUtxoEntries(response?.entries)).map((key) => key.toLowerCase());
 }
 
 /** The address's coins as node entries, less the held ones. */
@@ -1742,11 +1749,12 @@ export function explorerAddressUrl(address) { return IS_TESTNET ? `https://tn10.
 //
 // K reads no .kas names since 5.4 (K iOS 518fdc8c: .kachat only), and starts no .kas transfer. A
 // transfer started before then whose commit went out without its reveal still holds 2 KAS only its
-// saved redeem script can spend: the reveal is finished here (iOS KNSRevealRecovery, kept until no
-// record is left), on its own while the Wallet tab refreshes, else from Your Usernames' Finish
-// Transfer.
+// saved redeem script can spend: the reveal is finished here (K-Desktop d570abd
+// engine/kns-reveal-recovery.js, iOS KNSRevealRecovery, audit 2026-11-24 #4), on its own when the
+// Wallet tab refreshes (at most every 5 minutes), else from Your Usernames' Finish Transfer. The
+// module drops a record itself once its reveal landed or its commit is found gone twice in a row.
 
-// The engine's KNS write path expects its wallet object; this is the same shape for one source.
+// The recovery module expects the engine's wallet object; this is the same shape for one source.
 async function knsEngine(source, reviewed = null) {
   const from = await sourceWallet(source, reviewed);
   const k = await kaspa();
@@ -1763,36 +1771,40 @@ async function knsEngine(source, reviewed = null) {
   return engine;
 }
 
+const recordSource = (record) => (record.source?.kind === "spending" ? { kind: "spending", index: record.source.index } : { kind: "main" });
+
+/** Records this recent may still be with the send that made them (the module's own 10 minutes). */
+const REVEAL_LEFT_TO_SENDER_MS = 10 * 60_000;
+/** The Wallet tab refreshes often; the recovery looks at most this often (K-Desktop d570abd). */
+const REVEAL_RESUME_EVERY_MS = 5 * 60_000;
 let resumingReveals = false;
+let lastRevealResume = 0;
 
 /**
- * Sends the reveal of any .kas commit left on chain without one (iOS KNSRevealRecovery.resume, KaPay
- * iOS 2da5f4b), for the active account, for an hour (send-guards.js revealsToRetry): called each time
- * the Wallet tab refreshes, iOS's "becomes active". No password prompt: the reveal is the second half
- * of the transfer the password already approved, and the deposit it spends goes back to the owner.
- * Anything left after the hour stays on Your Domains' Finish Transfer. The keys come from the vault
- * at the time, so nothing runs while it's locked.
+ * Sends the reveal of any .kas commit left on chain without one, for the active account. No
+ * password prompt: the reveal is the second half of the transfer the password already approved, and
+ * the deposit it spends goes back to the owner. The keys come from the vault at the time, so nothing
+ * runs while it's locked.
  */
 export async function resumeDomainReveals() {
-  if (resumingReveals) return;
+  if (resumingReveals || Date.now() - lastRevealResume < REVEAL_RESUME_EVERY_MS) return;
   resumingReveals = true;
+  lastRevealResume = Date.now();
   try {
     const account = await activeAccountSecrets();
-    for (const record of revealsToRetry(await listPendingKnsTransfers(), { accountId: account.id, inFlow: new Set() })) {
+    for (const record of await pendingDomainTransfers()) {
+      if (Date.now() - Number(record.createdAt || 0) < REVEAL_LEFT_TO_SENDER_MS) continue;
       if ((await activeAccountSecrets()).id !== account.id) return;
       try {
-        const entries = (await withRpc(async (node) => checkedUtxoAnswer(await node.getUtxosByAddresses([record.commitAddress]))))?.entries;
-        if (!commitIsLive(record, entries)) continue;
-        const source = record.source?.kind === "spending" ? { kind: "spending", index: record.source.index } : { kind: "main" };
-        const engine = await knsEngine(source, { address: record.source?.address, accountId: account.id });
-        await resumeKnsTransfer({ engine, assetId: record.assetId, signer: { privateKey: engine.privateKey, address: engine.address }, log: logInfo });
-        logInfo("[KaPay] sent the reveal of a commit left without one:", record.domain);
+        const engine = await knsEngine(recordSource(record), { address: record.source?.address, accountId: account.id });
+        const outcome = await resumeKnsTransfer({ engine, record, signer: { privateKey: engine.privateKey, address: engine.address }, log: logInfo });
+        logInfo("[K] unfinished .kas transfer:", record.domain, outcome);
       } catch (error) {
-        logWarn("[KaPay] reveal of a commit left without one failed again:", error);
+        logWarn("[K] reveal of a commit left without one failed again:", error);
       }
     }
   } catch (error) {
-    logWarn("[KaPay] unfinished .kas transfers:", error);
+    logWarn("[K] unfinished .kas transfers:", error);
   } finally {
     resumingReveals = false;
   }
@@ -1809,43 +1821,12 @@ export async function pendingDomainTransfers() {
 }
 
 /** Finishes an unfinished transfer: reveals its commit with the key that sent it.
- *  -> { status: "revealed" | "already-transferred" | "no-commit", ... } */
-export async function finishDomainTransfer(record, onStatus = () => {}) {
-  // the record's own fields (kns-write.js savePendingTransfer): the name being moved and who gets it
+ *  -> "revealed" | "settled" (already revealed, or its commit is gone) | "waiting" (try again later) */
+export async function finishDomainTransfer(record) {
+  // the record's own fields: the name being moved and who gets it
   await confirmSpend({ title: "Finish Transfer", amountText: String(record?.domain || "Domain transfer"), recipient: record?.recipient || "" });
-  const source = record.source?.kind === "spending" ? { kind: "spending", index: record.source.index } : { kind: "main" };
-  const engine = await knsEngine(source);
-  return resumeKnsTransfer({
-    engine, assetId: record.assetId,
-    signer: { privateKey: engine.privateKey, address: engine.address },
-    onStatus,
-    log: logInfo,
-  });
-}
-
-/** A transfer's commit can't still be on its way after this long: by then it is on chain or gone. */
-export const COMMIT_SETTLE_MS = 10 * 60_000;
-
-/**
- * Whether an unfinished transfer the engine found "no-commit" may be forgotten: its commit address
- * read cleanly as empty (a failed read is never "empty"), and the record is old enough that a
- * commit whose broadcast went unanswered ("commit-unknown") would be on chain by now. Forgetting
- * one whose commit did land would leave its 2 KAS with no record to reveal them (audit 2026-11-13).
- */
-export async function domainTransferForgettable(record, now = Date.now()) {
-  const since = Number(record?.updatedAt || record?.createdAt || 0);
-  if (!record?.commitAddress || !(now - since >= COMMIT_SETTLE_MS)) return false;
-  try {
-    const balances = await balancesFor([record.commitAddress]);
-    return (balances[record.commitAddress] ?? 0n) === 0n;
-  } catch {
-    return false;
-  }
-}
-
-/** Forgets an unfinished transfer whose commit was never found on chain. */
-export function discardDomainTransfer(assetId) {
-  return clearPendingKnsTransfer(assetId);
+  const engine = await knsEngine(recordSource(record));
+  return resumeKnsTransfer({ engine, record, signer: { privateKey: engine.privateKey, address: engine.address }, log: logInfo });
 }
 
 // --- Chatting address picker (iOS ChattingAddressPickerView) ---------------------------------
