@@ -39,10 +39,45 @@ function tradeDeps() {
       return key && key.address === target?.address ? key.hex : null;
     },
     noteSpentOutpoints: (keys) => { wallet.holdSubmittedCoins(keys, trading); },
-    // a swap's KAS side isn't "Received KAS": the bell's own-input check already leaves it out
-    markOwnTransaction: () => {},
-    afterTrade: () => { setTimeout(() => { kusdt().refresh().catch(() => {}); }, 4000); },
+    // a swap's KAS side isn't "Received KAS": the bell's own-input check already leaves it out;
+    // the last one named is the trade's own, which afterTrade follows
+    markOwnTransaction: (txid) => { tradeTxid = String(txid || ""); },
+    afterTrade: () => {
+      const txid = tradeTxid;
+      tradeTxid = "";
+      if (txid) followTrade(txid);
+      else setTimeout(() => { kusdt().refresh().catch(() => {}); }, 4000);
+    },
   };
+}
+
+let tradeTxid = "";   // the trade's txid, from markOwnTransaction until afterTrade takes it
+let followRun = 0;    // the newest followTrade; an older one stops
+
+/** Widening waits, in seconds, between looks after a swap (K iOS 961fc05a followTrade). */
+export const FOLLOW_TRADE_WAITS = [3, 4, 6, 8, 10, 15, 20, 30];
+
+/**
+ * A swap went out (K iOS 961fc05a TokenWallet.followTrade): the coins it made for you (the kUSDT
+ * bought, or a sell's kUSDT change) show only once Trestly lists them, which takes longer than the
+ * one look 4 s later that used to be all a swap got. Looks again on a widening schedule (3 s to
+ * about 1.5 minutes) until a coin from the swap shows.
+ */
+function followTrade(txid) {
+  const run = ++followRun;
+  const id = txid.toLowerCase();
+  (async () => {
+    for (const wait of FOLLOW_TRADE_WAITS) {
+      await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+      if (run !== followRun) return;
+      const store = kusdt();
+      try { await store.refresh(); } catch { /* the next look tries again */ }
+      if (run !== followRun) return;
+      const shows = (store.heldHoldings() || []).some((holding) =>
+        store.coinsOf(holding).some((coin) => String(coin.transactionId || "").toLowerCase() === id));
+      if (shows) return;
+    }
+  })();
 }
 
 /** The popup's trade (one per popup, so one trade per address at a time). */
@@ -59,6 +94,7 @@ export function swapTrade() {
 export async function runKusdtSwap({ params, target, askApproval, isClosed }) {
   const t = swapTrade();
   trading = target.address;
+  tradeTxid = "";
   try {
     return await t.run({
       method: "kusdt_swap",

@@ -1072,7 +1072,13 @@ function describeTransaction(tx, address) {
   const paidTo = outputs
     .filter((o) => o.script_public_key_address)
     .map((o) => ({ address: o.script_public_key_address, sompi: BigInt(o.amount || 0) }));
-  return { txid: tx.transaction_id, time: Number(tx.block_time || 0), direction, amountSompi, feeSompi, paidTo };
+  // who paid in, and how much, so a row can count only what left this wallet (K iOS 961fc05a)
+  const spentFrom = inputs.map((input) => ({
+    address: String(input.previous_outpoint_address || "").toLowerCase(),
+    sompi: input.previous_outpoint_amount == null ? null : BigInt(input.previous_outpoint_amount),
+  }));
+  const outputTotalSompi = outputs.reduce((sum, o) => sum + BigInt(o.amount || 0), 0n);
+  return { txid: tx.transaction_id, time: Number(tx.block_time || 0), direction, amountSompi, feeSompi, paidTo, spentFrom, outputTotalSompi };
 }
 
 // --- UTXO labels (iOS setSpendingUtxoLabel: per address, keyed "txid:index") -----------------

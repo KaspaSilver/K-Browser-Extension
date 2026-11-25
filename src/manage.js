@@ -63,6 +63,7 @@ import { shownActiveAccount, SWITCHED_ELSEWHERE } from "./account-scope.js";
 import { sompiFromUserText } from "./amounts.js";
 import { showAddToPortfolio } from "./portfolio.js";
 import { loadOwnAddresses, ownAddressLabel } from "./own-addresses.js";
+import { ownHistoryAmount } from "./history-amount.js";
 import { bindSwipeToHide } from "./swipe-hide.js";
 import { kusdtListedIndices } from "./kusdt.js";
 import { KUSDT_LISTED_HIDE_MESSAGE, KUSDT_LISTED_ALERT_TITLE } from "../shared/ui/kusdt-wallet.js";
@@ -174,29 +175,50 @@ function historyHtml(state) {
   }
   if (!txs.length) return '<div class="list-row muted">No transactions yet.</div>';
   return txs.map((tx, i) => {
-    const cls = tx.direction === "out" ? "out" : tx.direction === "in" ? "in" : "none";
-    const breakdown = tx.direction === "out" ? outgoingBreakdown(tx, state.address) : null;
-    const moved = Boolean(breakdown) && breakdown.toOthers === 0n && breakdown.changeTotal > 0n;
-    const amountSompi = breakdown ? (moved ? breakdown.changeTotal : breakdown.toOthers) : tx.amountSompi;
+    const { direction, amountSompi, moved, breakdown } = historyRow(tx, state.address);
+    const cls = direction === "out" ? "out" : direction === "in" ? "in" : "none";
     const changeLines = (breakdown?.change || []).map((line) => `<span class="ios-tx-change">${esc(moved
       ? `To ${line.label}`
       : `Change ${groupedKas8(line.sompi)} KAS to ${line.label}`)}</span>`).join("");
     return `
       <button class="list-row ios-tx" data-tx="${i}">
-        <span class="ios-tx-icon ${cls}">${tx.direction === "out" ? SF.arrowUpFill : SF.arrowDownFill}</span>
+        <span class="ios-tx-icon ${cls}">${direction === "out" ? SF.arrowUpFill : SF.arrowDownFill}</span>
         <span class="tx-meta">
-          <span class="ios-tx-title ${cls}">${tx.direction === "out" ? (moved ? "Moved" : "Sent") : tx.direction === "in" ? "Received" : "Transaction"}</span>
+          <span class="ios-tx-title ${cls}">${direction === "out" ? (moved ? "Moved" : "Sent") : direction === "in" ? "Received" : "Transaction"}</span>
           ${changeLines}
           <span class="mono tiny muted">${esc(middle(tx.txid, 6))}</span>
           ${tx.time ? `<span class="tiny muted">${esc(txDate(tx.time))}</span>` : ""}
         </span>
         <span class="ios-tx-right">
-          ${tx.direction ? `<span class="ios-tx-amount ${cls}">${tx.direction === "out" ? "-" : "+"}${esc(groupedKas8(amountSompi))} KAS</span>` : ""}
+          ${direction ? `<span class="ios-tx-amount ${cls}">${direction === "out" ? "-" : "+"}${esc(groupedKas8(amountSompi))} KAS</span>` : ""}
           ${tx.feeSompi != null ? `<span class="tiny muted">${esc(feeText(tx.feeSompi))}</span>` : ""}
         </span>
         <span class="accent">${SF.upRightSquare}</span>
       </button>`;
   }).join("");
+}
+
+/**
+ * What a history row shows: Sent (what went to others), Moved (all of it to your own addresses) or
+ * Received. A swap also spends the pool's coins, so an outgoing row counts only what left this
+ * wallet (K iOS 961fc05a ownHistoryAmount); a swap that paid you Kaspa reads Received.
+ */
+function historyRow(tx, address) {
+  let direction = tx.direction;
+  let amountSompi = tx.amountSompi;
+  let breakdown = direction === "out" ? outgoingBreakdown(tx, address) : null;
+  if (breakdown) {
+    const own = ownHistoryAmount(tx, address, {
+      toOthers: breakdown.toOthers,
+      ownChange: breakdown.changeTotal,
+      isOwnAddress: (other) => ownAddressLabel(other) != null,
+    });
+    if (own?.direction === "out") breakdown = { ...breakdown, toOthers: own.amountSompi };
+    else if (own?.direction === "in") { direction = "in"; amountSompi = own.amountSompi; breakdown = null; }
+  }
+  const moved = Boolean(breakdown) && breakdown.toOthers === 0n && breakdown.changeTotal > 0n;
+  if (breakdown) amountSompi = moved ? breakdown.changeTotal : breakdown.toOthers;
+  return { direction, amountSompi, moved, breakdown };
 }
 
 /**
@@ -274,7 +296,12 @@ function utxosHtml(state, compoundFooter) {
 }
 
 function bindTabsContent(state, { address, repaint, reloadHistory, reloadCoins, onCompound }) {
-  for (const row of app.querySelectorAll("[data-tx]")) row.onclick = () => showTransactionSheet(state.history.txs[Number(row.dataset.tx)], address, repaint);
+  for (const row of app.querySelectorAll("[data-tx]")) row.onclick = () => {
+    const tx = state.history.txs[Number(row.dataset.tx)];
+    // the sheet's summary and Add to Portfolio use the row's own figure
+    const { direction, amountSompi } = historyRow(tx, address);
+    showTransactionSheet({ ...tx, direction, amountSompi }, address, repaint);
+  };
   const historyRetry = $("#history-retry");
   if (historyRetry) historyRetry.onclick = reloadHistory;
   const coinsRetry = $("#coins-retry");
