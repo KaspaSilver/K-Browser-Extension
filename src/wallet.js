@@ -1072,18 +1072,30 @@ function describeTransaction(tx, address) {
   const paidTo = outputs
     .filter((o) => o.script_public_key_address)
     .map((o) => ({ address: o.script_public_key_address, sompi: BigInt(o.amount || 0) }));
-  // who paid in, and how much, so a row can count only what left this wallet (K iOS 961fc05a)
-  const spentFrom = inputs.map((input) => ({
-    address: String(input.previous_outpoint_address || "").toLowerCase(),
-    sompi: input.previous_outpoint_amount == null ? null : BigInt(input.previous_outpoint_amount),
-  }));
-  const outputTotalSompi = outputs.reduce((sum, o) => sum + BigInt(o.amount || 0), 0n);
-  return { txid: tx.transaction_id, time: Number(tx.block_time || 0), direction, amountSompi, feeSompi, paidTo, spentFrom, outputTotalSompi };
+  // who paid in and what each output got, so a row can count only what left this wallet
+  // (shared/engine/history-amounts.js ownHistoryAmount, K iOS 961fc05a)
+  const flows = {
+    inputs: inputs.map((input) => ({ previous_outpoint_address: input.previous_outpoint_address || "", previous_outpoint_amount: input.previous_outpoint_amount ?? null })),
+    outputs: outputs.map((o) => ({ script_public_key_address: o.script_public_key_address || "", amount: o.amount ?? 0 })),
+  };
+  return { txid: tx.transaction_id, time: Number(tx.block_time || 0), direction, amountSompi, feeSompi, paidTo, flows };
 }
 
 // --- UTXO labels (iOS setSpendingUtxoLabel: per address, keyed "txid:index") -----------------
 
 function utxoLabelsKey(address) { return `kachat.utxoLabels.${address}`; }
+
+/** The coin-label keys of `addresses` on both networks (a Cold Storage quantum address no account
+ *  watches any more, K iOS 961fc05a). */
+export function utxoLabelKeysFor(addresses) {
+  const keys = [];
+  for (const address of addresses || []) {
+    for (const hrp of ["kaspa", "kaspatest"]) {
+      try { keys.push(utxoLabelsKey(reencodeAddress(String(address), hrp))); } catch { /* not an address */ }
+    }
+  }
+  return [...new Set(keys)];
+}
 
 export async function utxoLabels(address) {
   return (await getLocal(utxoLabelsKey(address))) || {};

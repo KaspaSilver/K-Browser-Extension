@@ -1,7 +1,8 @@
-// The three push screens off the Portfolio page - iOS KasPriceChartScreen,
-// PortfolioValueChartScreen and HashrateChartScreen - and the Compare Against sheet their gear
-// opens. Each screen is drawn once and then updated region by region (header, chart, range
-// buttons, cards), so a price landing never steals focus from the converter or the mining field.
+// The two push screens off the Portfolio page - iOS KasPriceChartScreen and
+// PortfolioValueChartScreen - and the Compare Against sheet their gear opens. Each screen is drawn
+// once and then updated region by region (header, chart, range buttons, cards), so a price landing
+// never steals focus from the converter. Network Hashrate and its Mining Estimate left Portfolio
+// for K's Explorer (K iOS 961fc05a), which the extension doesn't have.
 
 import { app, esc, render, $ } from "./ui.js";
 import * as dock from "./dock.js";
@@ -9,7 +10,7 @@ import * as core from "./portfolio-core.js";
 import { mountAreaChart } from "./portfolio-charts.js";
 import { SF, openPanel, bindPullToRefresh, fitText } from "./portfolio-ui.js";
 
-const { market, store, hashrate } = core;
+const { market, store } = core;
 
 function navBar(title, { gear = false } = {}) {
   return `
@@ -307,138 +308,6 @@ export function showValueScreen({ onBack }) {
   core.refreshSpotPriceIfStale();
   core.ensureHistory(market.rangeDays);
   if (market.flipped) core.ensureAltSeries();
-}
-
-// =================================================================================================
-// Network Hashrate
-// =================================================================================================
-
-const HASH_RANGES = [["1M", 30], ["3M", 90], ["1Y", 365], ["All", 0]];
-const UNITS = [["GH/s", 1e-6], ["TH/s", 1e-3], ["PH/s", 1]];
-const hashState = { rangeDays: 90, amountText: "", unit: "TH/s" };
-
-export function showHashrateScreen({ onBack }) {
-  const state = { scrubbed: null, range: null };
-  render(`
-    ${navBar("Network Hashrate")}
-    <div class="pf-scroll pf-pad" id="pf-scroll">
-      <div class="pf-ptr" id="pf-ptr"><span class="spinner small-spin"></span></div>
-      <div class="pf-chart-head" id="pf-head"></div>
-      <div class="pf-chart" id="pf-chart-box"></div>
-      <div id="pf-ranges"></div>
-      <div id="pf-reward"></div>
-      <div class="pf-glass pf-card">
-        <div class="pf-card-title">Mining Estimate</div>
-        <div class="pf-mine-input">
-          <input id="pf-hash-amount" inputmode="decimal" placeholder="0" autocomplete="off" value="${esc(hashState.amountText)}" />
-          <div class="segmented pf-units" role="radiogroup" aria-label="Unit">
-            ${UNITS.map(([label]) => `<button type="button" role="radio" data-unit="${label}" aria-checked="${hashState.unit === label}">${label}</button>`).join("")}
-          </div>
-        </div>
-        <div id="pf-estimate"></div>
-      </div>
-      <div class="pf-glass pf-card">
-        <div class="pf-card-title">About Hashrate</div>
-        <p class="muted pf-body-text">Hashrate is how much computing power miners are pointing at Kaspa. A higher hashrate means more work securing the chain, and it moves with mining profitability rather than with the price directly. Figures come from the Kaspa REST API set in Connection Settings, at one sample per day.</p>
-      </div>
-    </div>`, "portfolio:hashrate");
-  // Coming back to this tab re-reads the account and currency first (either may have changed).
-  dock.remember(async () => { await core.loadStore(); showHashrateScreen({ onBack }); });
-  const root = $("#pf-scroll");
-  $("#back").onclick = () => { unsubscribe(); onBack(); };
-  bindPullToRefresh($("#pf-scroll"), $("#pf-ptr"), () => core.refreshHashrateIfNeeded({ force: true }));
-
-  const visible = () => {
-    const all = hashrate.history;
-    if (!hashState.rangeDays) return all;
-    const cutoff = Date.now() - hashState.rangeDays * 86_400_000;
-    const windowed = all.filter((p) => p[0] >= cutoff);
-    return windowed.length >= 2 ? windowed : all;
-  };
-
-  const paintHead = () => {
-    const value = state.scrubbed ? state.scrubbed[1] : hashrate.current;
-    $("#pf-head").innerHTML = `
-      <div class="pf-ch-title"><span class="accent pf-pick">${SF.pickaxe(20)}</span><span>Kaspa Network</span></div>
-      ${state.scrubbed ? `<div class="muted pf-sub">${esc(new Date(state.scrubbed[0]).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }))}</div>` : ""}
-      ${state.range ? rangeSummaryHtml(state.range, core.hashrateText, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : ""}
-      <div class="pf-big-row"><span class="pf-big" data-fit="0.6">${esc(core.hashrateText(value))}</span></div>`;
-    fitText($("#pf-head"));
-  };
-
-  const paintChart = () => {
-    const points = visible();
-    const box = $("#pf-chart-box");
-    if (points.length >= 2) {
-      box.innerHTML = '<div class="pf-chart-host" id="pf-chart" style="height:260px"></div>';
-      mountChart(points, {
-        onScrub: (p) => { state.scrubbed = p; paintHead(); },
-        onRange: (r) => { state.range = r; paintHead(); },
-      });
-    } else {
-      chartHandle?.destroy();
-      box.innerHTML = spinnerBox(260);
-    }
-  };
-
-  const paintRanges = () => {
-    $("#pf-ranges").innerHTML = `<div class="pf-ranges capsules">${HASH_RANGES.map(([label, days]) =>
-      `<button data-hdays="${days}" aria-checked="${hashState.rangeDays === days}">${label}</button>`).join("")}</div>`;
-    for (const button of app.querySelectorAll("[data-hdays]")) {
-      button.onclick = () => {
-        state.scrubbed = null;
-        hashState.rangeDays = Number(button.dataset.hdays);
-        keepScroll(() => { paintHead(); paintChart(); paintRanges(); });
-      };
-    }
-  };
-
-  const paintReward = () => {
-    const row = (label, value) => `<div class="pf-stat-row"><span class="muted">${esc(label)}</span><span class="pf-stat-value">${esc(value)}</span></div>`;
-    $("#pf-reward").innerHTML = `
-      <div class="pf-glass pf-stats">
-        ${row("Block Reward", hashrate.blockReward != null ? core.kas(hashrate.blockReward) : "—")}
-        ${row("Next Block Reward", hashrate.nextReward != null ? core.kas(hashrate.nextReward) : "—")}
-        ${row("Next Block Reward Reduction", hashrate.nextAt ? new Date(hashrate.nextAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—")}
-      </div>`;
-  };
-
-  const paintEstimate = () => {
-    const network = hashrate.current;
-    const reward = hashrate.blockReward;
-    const amount = core.inputValue(hashState.amountText);
-    const toPH = UNITS.find(([label]) => label === hashState.unit)[1];
-    const emission = reward > 0 ? reward * 10 * 86_400 : null;
-    const daily = network > 0 && emission && amount > 0 ? emission * ((amount * toPH) / network) : null;
-    const priceNow = market.price?.price;
-    const payout = (title, value) => `
-      <div class="pf-payout"><span class="muted">${esc(title)}</span>
-        <span class="pf-payout-value"><span class="strong">${esc(core.kas(value))}</span>${priceNow > 0 ? `<span class="muted pf-caption">${esc(core.currency(value * priceNow))}</span>` : ""}</span></div>`;
-    $("#pf-estimate").innerHTML = daily != null ? `
-      <div class="pf-payouts">${payout("Per day", daily)}<div class="pf-divider"></div>${payout("Per week", daily * 7)}<div class="pf-divider"></div>${payout("Per month", daily * 30)}</div>
-      <p class="muted pf-caption">At ${esc(core.hashrateText(network))} network hashrate and a ${reward.toFixed(4)} KAS block reward. Before pool fees, power and luck, and both figures move.</p>`
-      : '<p class="muted pf-body-text">Enter your hashrate to estimate earnings.</p>';
-  };
-
-  const amountInput = $("#pf-hash-amount");
-  amountInput.oninput = () => { core.regroupField(amountInput); hashState.amountText = amountInput.value; paintEstimate(); };
-  for (const button of app.querySelectorAll("[data-unit]")) {
-    button.onclick = () => {
-      hashState.unit = button.dataset.unit;
-      for (const other of app.querySelectorAll("[data-unit]")) other.setAttribute("aria-checked", String(other === button));
-      paintEstimate();
-    };
-  }
-
-  const paintAll = () => keepScroll(() => { paintHead(); paintChart(); paintRanges(); paintReward(); paintEstimate(); });
-  const unsubscribe = core.subscribe((kind) => {
-    if (!root.isConnected) { unsubscribe(); return; }
-    if (kind === "hashrate") paintAll();
-    else if (kind === "price") paintEstimate();
-  });
-  paintAll();
-  core.refreshHashrateIfNeeded();
-  core.refreshSpotPriceIfStale();
 }
 
 // =================================================================================================

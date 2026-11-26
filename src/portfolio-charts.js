@@ -246,13 +246,3 @@ export function mountAreaChart(host, points, opts = {}) {
   draw();
   return { destroy() { resize.disconnect(); } };
 }
-
-/** PortfolioSparkline: a 1.6 pt accent line, no axes. */
-export function sparklineSvg(points, width = 96, height = 34) {
-  if (!points || points.length < 2) return "";
-  const values = points.map((p) => p[1]);
-  const min = Math.min(...values);
-  const span = Math.max(Math.max(...values) - min, Number.MIN_VALUE);
-  const d = points.map((p, i) => `${i ? "L" : "M"}${((i / (points.length - 1)) * width).toFixed(1)},${(height * (1 - (p[1] - min) / span)).toFixed(1)}`).join("");
-  return `<svg class="pf-spark" width="${width}" height="${height}" viewBox="-1 -1 ${width + 2} ${height + 2}" aria-hidden="true"><path d="${d}" fill="none" stroke="${ACCENT}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-}

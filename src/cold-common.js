@@ -5,6 +5,11 @@
 import { esc } from "./ui.js";
 
 export const SF = {
+  // shield / number / minus.circle: the quantum-resistant address rows (K iOS 961fc05a)
+  shield: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 5 6v5.4c0 4.4 3 8.2 7 9.4 4-1.2 7-5 7-9.4V6Z"/></svg>',
+  number: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9.5 3.5 7.5 20.5M16.5 3.5l-2 17M4 8.5h16.5M3.5 15.5H20"/></svg>',
+  shieldSmall: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 19.6 5.7v5.8c0 4.6-3.2 8.3-7.6 9.7-4.4-1.4-7.6-5.1-7.6-9.7V5.7z" fill="currentColor"/></svg>',
+  minusCircle: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>',
   // lock.fill
   lockFill: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10.5" width="16" height="11" rx="2.5" fill="currentColor"/><path d="M7.5 10.5V7.5a4.5 4.5 0 0 1 9 0v3" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>',
   // lock.shield (outline, 40 pt on the empty state)

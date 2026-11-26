@@ -1,6 +1,6 @@
 // Portfolio data, math, formatting and the price pipeline - the non-UI half of the iOS port
 // (PortfolioModels, PortfolioManager, PortfolioLedgerStore, PortfolioViewModel,
-// PortfolioAddressImporter, CoinGeckoService / MarketPairService / KaspaNetworkStatsService).
+// PortfolioAddressImporter, CoinGeckoService / MarketPairService).
 //
 // Everything is scoped per wallet account, as iOS scopes it per wallet: one chrome.storage.local
 // key holds the account's portfolios (up to 5) with their buy/sell rows. Prices go through the
@@ -17,7 +17,6 @@ import {
   baseDaysFor, cutPoints, yearToDateDays, CHART_PAIRS, fetchMarketPairHistory, dividePoints,
   resolveDailyPrices, resolveDailyPriceSingle, peekDailyPrices, utcDayKey, PRICE_REQUEST_SPACING_MS,
 } from "../shared/engine/prices.js";
-import { fetchNetworkStats, peekNetworkStats } from "../shared/engine/network-stats.js";
 import { getEndpoint } from "../shared/engine/endpoints.js";
 import { transactionBelongsInHistory } from "../shared/engine/sync.js";
 import { csvText, csvTextBack, csvRowMatcher } from "./csv-text.js";
@@ -52,7 +51,7 @@ function uuid() {
 // --- listeners: the screens repaint when data or prices change ----------------------------------
 
 const listeners = new Set();
-/** fn(kind) - kind is "data", "price", "history", "hashrate" or "pair". Returns an unsubscribe. */
+/** fn(kind) - kind is "data", "price", "history" or "pair". Returns an unsubscribe. */
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 function emit(kind) { for (const fn of [...listeners]) { try { fn(kind); } catch (error) { console.warn("[Portfolio]", error); } } }
 
@@ -989,44 +988,6 @@ export function chartCurrentValue() {
   const summary = summaryFor();
   if (!(market.flipped && canFlip())) return summary.currentValue;
   return market.altPrice == null ? null : summary.holdingsKas * market.altPrice;
-}
-
-// =================================================================================================
-// Network hashrate (KaspaNetworkStatsService)
-// =================================================================================================
-
-export const hashrate = { history: [], current: null, blockReward: null, nextReward: null, nextAt: null, fetchedAt: 0 };
-
-function applyStats(stats) {
-  if (!stats) return;
-  hashrate.history = stats.history.map(([t, hs]) => [t, hs / 1e15]);
-  hashrate.current = stats.currentHashrate / 1e15;
-  hashrate.blockReward = stats.blockRewardKas ?? null;
-  hashrate.nextReward = stats.nextHalving?.amountKas ?? null;
-  hashrate.nextAt = stats.nextHalving?.at ?? null;
-  hashrate.fetchedAt = stats.fetchedAt;
-}
-applyStats(peekNetworkStats());
-
-let hashFetching = null;
-/** Fifteen minutes between fetches unless forced. */
-export async function refreshHashrateIfNeeded({ force = false } = {}) {
-  if (!force && hashrate.fetchedAt && Date.now() - hashrate.fetchedAt < 15 * 60_000) return;
-  if (hashFetching) return hashFetching;
-  hashFetching = (async () => {
-    applyStats(await fetchNetworkStats({ force }));
-    emit("hashrate");
-  })().finally(() => { hashFetching = null; });
-  return hashFetching;
-}
-
-/** HashrateFormat.display, from PH/s. */
-export function hashrateText(phs) {
-  if (phs == null || !Number.isFinite(phs)) return "—";
-  if (phs >= 1000) return `${fixed(phs / 1000, 2)} EH/s`;
-  if (phs >= 1) return `${fixed(phs, 1)} PH/s`;
-  if (phs >= 0.001) return `${fixed(phs * 1000, 1)} TH/s`;
-  return `${fixed(phs * 1e6, 1)} GH/s`;
 }
 
 // =================================================================================================

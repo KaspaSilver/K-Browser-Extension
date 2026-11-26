@@ -23,6 +23,7 @@ import { getEndpoint } from "../shared/engine/endpoints.js";
 import { isQuantumIndex, QUANTUM_INDEX_BASE } from "../shared/engine/quantum.js";
 import { createKusdtWallet, KUSDT_DISCOVER_PAST, isRegularIndex } from "../shared/ui/kusdt-wallet.js";
 import { formatKusdt } from "../shared/engine/kusdt.js";
+import { bellTimestamp } from "../shared/ui/notification-recency.js";
 import { logInfo } from "./log.js";
 
 /** The account kUSDT is shown for, as last synced. */
@@ -68,12 +69,18 @@ async function transactionInputs(txid) {
   });
   if (!response.ok) return null;
   const tx = await response.json();
-  if (!Array.isArray(tx?.inputs)) return null;
-  return tx.inputs.map((input) => ({
-    hash: input?.previous_outpoint_hash ?? input?.previousOutpoint?.transactionId ?? null,
-    index: input?.previous_outpoint_index ?? input?.previousOutpoint?.index ?? null,
-    address: input?.previous_outpoint_address || input?.previous_outpoint_resolved?.script_public_key_address || null,
-  }));
+  // and when it happened (its block time): a received coin's row and bell entry are dated by it
+  // (K 961fc05a isOwnTransfer's `at`)
+  const blockTimeMs = Number(tx?.block_time) > 0 ? Number(tx.block_time) : null;
+  if (!Array.isArray(tx?.inputs)) return { inputs: null, blockTimeMs };
+  return {
+    inputs: tx.inputs.map((input) => ({
+      hash: input?.previous_outpoint_hash ?? input?.previousOutpoint?.transactionId ?? null,
+      index: input?.previous_outpoint_index ?? input?.previousOutpoint?.index ?? null,
+      address: input?.previous_outpoint_address || input?.previous_outpoint_resolved?.script_public_key_address || null,
+    })),
+    blockTimeMs,
+  };
 }
 
 /** Regular addresses `start`..`end - 1` of the synced account, from the cache or derived. */
@@ -123,9 +130,11 @@ export function kusdt() {
     fetchTransactionInputs: transactionInputs,
     // the bell holds Kaspa arriving and .kachat news; "Received X kUSDT" goes there too
     notificationsEnabled: () => true,
-    notify: ({ title, body }) => {
+    // The bell only (no banner here), dated when the newest coin came (K 961fc05a): coins found
+    // on opening the popup or switching accounts aren't filed as just now.
+    notify: ({ title, body, happenedAtMs = null }) => {
       const stamp = Date.now();
-      bell.record({ id: `kusdt-${stamp}`, source: "wallet", title, body, timestamp: stamp, targetId: "kusdt", account: ctx.main });
+      bell.record({ id: `kusdt-${stamp}`, source: "wallet", title, body, timestamp: bellTimestamp(happenedAtMs, stamp), targetId: "kusdt", account: ctx.main });
     },
     // a kUSDT send's KAS change goes back to an address that paid into it: the bell's own-input
     // check already leaves it out

@@ -118,6 +118,11 @@ export function scanQr({ title = "Scan QR Code", hint = "Point camera at a QR co
                 progressEl.innerHTML = `
                   <div class="scanner-dots">${Array.from({ length: total }, (_, i) => `<span class="${indices.includes(i) ? "on" : ""}"></span>`).join("")}</div>
                   <div class="small">${received} / ${total} frames</div>`;
+              } else if ("progress" in result && !progressEl.hidden) {
+                // a KasSigner v1.1 set that failed its digest check starts over: the count goes
+                // back to the prompt and fills again (K iOS 961fc05a MultiFrameQRScannerView)
+                progressEl.hidden = true;
+                hintEl.hidden = false;
               }
               if (result.complete) return finish(result.complete);
             }

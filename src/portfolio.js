@@ -4,8 +4,9 @@
 // Currency).
 //
 // One continuous page under the toolbar and large title: the portfolio cards, the Kaspa and Value
-// squares, the Network Hashrate card, then Transactions. The squares and the hashrate card push
-// their chart screens (portfolio-screens.js); everything else opens as a sheet, as on iOS.
+// squares, then Transactions. The squares push their chart screens (portfolio-screens.js);
+// everything else opens as a sheet, as on iOS. The Network Hashrate card moved to K's Explorer
+// (K iOS 961fc05a), which the extension doesn't have.
 // Data, math and prices live in portfolio-core.js.
 //
 // Left out on purpose (iOS-only services): Nextcloud import / export, and the home-screen widget.
@@ -18,11 +19,10 @@ import { ext } from "./browser.js";
 import { scanQr } from "./camera.js";
 import { looksLikeName, resolveEverywhere, primaryResolution, notFoundMessage } from "./names.js";
 import * as core from "./portfolio-core.js";
-import { sparklineSvg } from "./portfolio-charts.js";
 import { SF, openPanel, pfToast, bindPullToRefresh, changeBadge, fitText } from "./portfolio-ui.js";
-import { showPriceScreen, showValueScreen, showHashrateScreen } from "./portfolio-screens.js";
+import { showPriceScreen, showValueScreen } from "./portfolio-screens.js";
 
-const { store, market, hashrate } = core;
+const { store, market } = core;
 
 const view = {
   selecting: false,
@@ -42,7 +42,6 @@ export async function showPortfolio() {
   paintHome();
   core.refreshSpotPriceIfStale();
   core.ensureSevenDay();
-  core.refreshHashrateIfNeeded();
   core.startPriceBackfillIfNeeded();
 }
 
@@ -57,7 +56,6 @@ function paintHome() {
       <div class="pf-ptr" id="pf-ptr"><span class="spinner small-spin"></span></div>
       <div class="pf-cards" id="pf-cards">${cardsHtml()}</div>
       <div class="pf-squares">${priceSquareHtml()}${valueSquareHtml()}</div>
-      ${hashrateCardHtml()}
       ${realizedPLCardHtml()}
       ${feesCardHtml()}
       ${transactionsSectionHtml()}
@@ -115,7 +113,7 @@ function cardsHtml() {
   return cards + add;
 }
 
-// --- launcher squares and the hashrate card ------------------------------------------------------
+// --- launcher squares ------------------------------------------------------
 
 function priceSquareHtml() {
   const p = market.price;
@@ -137,17 +135,6 @@ function valueSquareHtml() {
       <span class="pf-spacer"></span>
       <span class="pf-square-value" data-fit="0.6">${esc(store.valuesHidden ? core.MASKED : core.currency(summary.currentValue))}</span>
       ${change ? changeBadge(change.percent, change.amount >= 0, { cls: "foot" }) : '<span class="muted pf-tiny">24h change not available yet</span>'}
-    </button>`;
-}
-
-function hashrateCardHtml() {
-  return `
-    <button class="pf-glass pf-hash-card" id="pf-open-hashrate">
-      <span class="accent pf-hash-icon">${SF.pickaxe(20)}</span>
-      <span class="pf-hash-text"><span class="pf-square-title">Network Hashrate</span><span class="pf-hash-value" data-fit="0.7">${esc(core.hashrateText(hashrate.current))}</span></span>
-      <span class="pf-spacer"></span>
-      ${hashrate.history.length >= 2 ? sparklineSvg(hashrate.history.slice(-90)) : ""}
-      <span class="muted">${SF.chevronRight(11)}</span>
     </button>`;
 }
 
@@ -260,7 +247,7 @@ function rowHtml(tx) {
 function bindHome() {
   $("#pf-eye").onclick = () => core.setValuesHidden(!store.valuesHidden);
   bindPullToRefresh($("#pf-home-scroll"), $("#pf-ptr"), async () => {
-    await Promise.all([core.pullRefresh(), core.refreshHashrateIfNeeded({ force: true })]);
+    await core.pullRefresh();
   });
 
   for (const card of app.querySelectorAll("[data-card]")) {
@@ -274,7 +261,6 @@ function bindHome() {
   const back = () => showPortfolio();
   $("#pf-open-price").onclick = () => showPriceScreen({ onBack: back });
   $("#pf-open-value").onclick = () => showValueScreen({ onBack: back });
-  $("#pf-open-hashrate").onclick = () => showHashrateScreen({ onBack: back });
 
   if (view.selecting) {
     $("#pf-select-all").onclick = () => {

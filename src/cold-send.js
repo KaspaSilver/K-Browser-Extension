@@ -17,6 +17,12 @@
 // once, Max) opens on the review. A build that fails, or a scan that isn't a signed transaction,
 // shows Something Went Wrong with Try Again back on the review.
 //
+// From a KasSigner quantum-resistant (KCC-3) address (K iOS 961fc05a, K-Desktop 9c30208): every coin
+// goes (none may stay behind the key this spend puts on chain), so there is no Coin Control; the
+// change - or a compound's coins - goes to another unused quantum address of the account
+// (cold-quantum-state.js freshQuantumChange), named on the QR step; the request is KSPT 0x06 and
+// names the address's number on the unit, with Sign Without the Address Number when the unit refuses.
+//
 // No private key is ever involved: the transaction is built unsigned (shared/ui/kspt.js, the same
 // engine the desktop app and iOS use), signed on the device, and checked against what was sent for
 // signing before it is broadcast.
@@ -51,8 +57,10 @@ import {
   KSPT_MAX_INPUTS, MIN_RELAY_FEE_PER_GRAM, REFERENCE_MASS_FOR_FEE_EDITOR, calculateMass, calculateFee,
   fetchQuotedFeeRateSompiPerGram, previewAutomaticSelection, estimateMaxAmount, compoundInputs,
   buildUnsignedTransaction, unsignedToKsptBytes, chunkQrFrames, QrFrameAccumulator, looksLikeKspt,
-  decodeKspt, broadcastSigned,
+  decodeKspt, broadcastSigned, KCC3_SIG_SCRIPT_LEN, QUANTUM_COMPOUND_NEEDS_FRESH_ADDRESS,
 } from "../shared/ui/kspt.js";
+import { unitMarksAsChange, QUANTUM_CHAIN_RECEIVE } from "../shared/ui/cold-quantum.js";
+import { freshQuantumChange, releaseQuantumChange, markQuantumAddress } from "./cold-quantum-state.js";
 
 const TIERS = [["normal", "Normal", 1n], ["fast", "Fast", 2n], ["priority", "Priority", 5n]];
 // The order the screens slide by: a later one comes in from the right, an earlier from the left.
@@ -63,15 +71,22 @@ const ORDER = ["to", "amount", "review", "fee", "qr", "signed", "failed"];
  * @param {string} opts.fromAddress
  * @param {bigint} opts.availableSompi
  * @param {boolean} [opts.compound]
+ * @param {object} [opts.quantum]  a quantum-resistant source: { record, records, labelOf(address) }
  * @param {Function} opts.onClose   Cancel
  * @param {Function} opts.onDone    Done once it was sent (refresh the address)
  */
 export function showColdSend(opts) {
   const from = opts.fromAddress;
   const compound = Boolean(opts.compound);
+  const quantum = opts.quantum || null;
+  // a quantum address compounds into a fresh quantum address, picked once the review is up
+  const intoItself = compound && !quantum;
   const s = {
-    toInput: compound ? from : "",
-    recipient: compound ? { address: from, domain: null, tld: null } : null, // { address, domain, tld }
+    toInput: intoItself ? from : "",
+    recipient: intoItself ? { address: from, domain: null, tld: null } : null, // { address, domain, tld }
+    // the quantum address this flow reserved for its change (or, compounding, as the destination),
+    // handed back if the send never goes out
+    reservedChange: null,
     recipientError: "",
     resolving: false,
     amountText: "",
@@ -117,7 +132,12 @@ export function showColdSend(opts) {
     const amount = amountSompi();
     return amount != null && amount > BigInt(opts.availableSompi ?? 0n);
   };
-  const referenceMass = () => (s.manualKeys?.length ? calculateMass(s.manualKeys.length, [34, 34], 0) : REFERENCE_MASS_FOR_FEE_EDITOR);
+  const referenceMass = () => {
+    // a quantum source's inputs carry the 101-byte signature script and its outputs P2SH scripts:
+    // priced as such, or the fee shown would read short of the one built
+    if (quantum) return calculateMass(Math.max(s.manualKeys?.length || 0, 1), [35, 35], 0, 1, KCC3_SIG_SCRIPT_LEN);
+    return s.manualKeys?.length ? calculateMass(s.manualKeys.length, [34, 34], 0) : REFERENCE_MASS_FOR_FEE_EDITOR;
+  };
   const baseRate = () => s.liveRate ?? MIN_RELAY_FEE_PER_GRAM;
   const defaultFee = () => calculateFee(referenceMass(), baseRate());
   const extraFee = () => (s.customExtra != null ? s.customExtra : defaultFee() * ((TIERS.find((t) => t[0] === s.tier)?.[2] || 1n) - 1n));
@@ -156,6 +176,8 @@ export function showColdSend(opts) {
   };
   const close = (then) => {
     closed = true;
+    // closed before the send went out: the change address goes back to the pool
+    if (!s.sent) releaseQuantumChange(s.reservedChange);
     stopTimer();
     clearTimeout(previewTimer);
     lookup.cancel();
@@ -172,7 +194,7 @@ export function showColdSend(opts) {
     if (s.manualKeys || amount == null) return;
     const rate = feeRateOverride();
     previewTimer = setTimeout(async () => {
-      const preview = await previewAutomaticSelection({ engine: await getEngine(), fromAddress: from, amountSompi: amount, feeRateSompiPerGram: rate }).catch(() => null);
+      const preview = await previewAutomaticSelection({ engine: await getEngine(), fromAddress: from, amountSompi: amount, feeRateSompiPerGram: rate, toAddress: effectiveAddress() || null }).catch(() => null);
       if (closed || amountSompi() !== amount || feeRateOverride() !== rate || s.manualKeys) return;
       s.preview = preview;
       paint();
@@ -184,7 +206,7 @@ export function showColdSend(opts) {
     s.estimatingMax = true;
     paint();
     try {
-      const max = await estimateMaxAmount({ engine: await getEngine(), fromAddress: from, feeRateOverride: feeRateOverride(), manualUtxoKeys: s.manualKeys });
+      const max = await estimateMaxAmount({ engine: await getEngine(), fromAddress: from, feeRateOverride: feeRateOverride(), manualUtxoKeys: s.manualKeys, toAddress: effectiveAddress() || null });
       s.amountText = trimmedKas(max);
       amountField.setKas(s.amountText, price());
       s.maxMode = true;
@@ -339,12 +361,18 @@ export function showColdSend(opts) {
   };
 
   // --- Step 3, the review: Build Unsigned Transaction -------------------------------------------
-  const compoundNoteHtml = () => (compound ? `<p class="cold-step-note">${s.compoundHasMore
+  const compoundNoteHtml = () => (compound ? `<p class="cold-step-note">${quantum
+    ? "Moves all of this address's coins into one, at an unused quantum-resistant address of this account: this transaction puts this address's key on chain."
+    : s.compoundHasMore
     ? `This address has more than ${KSPT_MAX_INPUTS} UTXOs. KasSigner can sign at most ${KSPT_MAX_INPUTS} inputs per transaction, so this merges the largest ${KSPT_MAX_INPUTS} into one. Run Compound again afterward to keep combining the rest.`
     : "Merges all of this address's UTXOs into a single one, so future sends need fewer inputs."}</p>` : "");
-  const toRowHtml = (recipient) => (compound
-    ? esc("This address (consolidating)")
-    : reviewAddressHtml({ name: recipient?.name || null, address: recipient?.address || "" }));
+  const toRowHtml = (recipient) => {
+    if (intoItself) return esc("This address (consolidating)");
+    // a quantum compound's destination, named, once it is picked
+    if (compound && !recipient?.address) return '<span class="spinner small-spin"></span>';
+    const name = recipient?.name || (quantum && quantum.records.some((r) => r.address === String(recipient?.address || "").toLowerCase()) ? quantum.labelOf(recipient.address) : null);
+    return reviewAddressHtml({ name, address: recipient?.address || "" });
+  };
   const fromRowHtml = () => reviewAddressHtml({ name: "Cold Storage", address: from });
   const reviewHtml = () => {
     const amount = amountSompi();
@@ -362,8 +390,9 @@ export function showColdSend(opts) {
         tier: s.tier,
         custom: s.customExtra != null,
         feeText: `~${kasText(fee)}`,
-        // Compound manages its own input set (the largest KasSigner can sign at once).
-        showsCoinControl: !compound,
+        // Compound manages its own input set (the largest KasSigner can sign at once); a quantum
+        // source spends every coin, so there is nothing to pick there either.
+        showsCoinControl: !compound && !quantum,
         coinSummary: s.manualKeys ? `${s.manualKeys.length} UTXO${s.manualKeys.length === 1 ? "" : "s"} selected` : "Automatic",
         editPill: true,
       })}`;
@@ -460,7 +489,19 @@ export function showColdSend(opts) {
     s.building = true;
     handle?.refresh();
     const toAddress = effectiveAddress();
+    // A quantum source's change goes to a fresh quantum address of the account: this spend makes the
+    // source's key public, and the build refuses change back to it. A rebuild hands the earlier pick
+    // back and chooses again; a quantum compound's destination was reserved when it opened.
+    const pickChange = Boolean(quantum) && !compound;
+    let changeAddress = null;
     try {
+      if (pickChange) {
+        releaseQuantumChange(s.reservedChange);
+        s.reservedChange = null;
+        changeAddress = await freshQuantumChange(quantum.records, from);
+        if (closed) { releaseQuantumChange(changeAddress); return; }
+        s.reservedChange = changeAddress;
+      }
       const unsigned = await buildUnsignedTransaction({
         engine: await getEngine(),
         fromAddress: from,
@@ -468,8 +509,16 @@ export function showColdSend(opts) {
         amountSompi: amount,
         feeRateOverride: feeRateOverride(),
         manualUtxoKeys: s.manualKeys ?? s.preview?.utxoKeys ?? null,
+        changeAddress,
+        quantumUnitIndex: quantum ? (quantum.record.unitIndex ?? null) : null,
+        quantumUnitChain: quantum?.record.chain ?? QUANTUM_CHAIN_RECEIVE,
       });
       if (closed) return;
+      // no change after all (a Max send): the address isn't taken
+      if (pickChange && changeAddress && !unsigned.changeAddress) {
+        releaseQuantumChange(changeAddress);
+        s.reservedChange = null;
+      }
       // no change output: the recipient's alone must fit the storage-mass budget, or the node would
       // refuse what KasSigner signs (KaPay iOS 0799cec) - refused before the QR is shown
       const massError = coldRecipientMassError(unsigned);
@@ -488,6 +537,10 @@ export function showColdSend(opts) {
       s.decoded = null;
       go("qr");
     } catch (error) {
+      if (pickChange) {
+        releaseQuantumChange(changeAddress);
+        s.reservedChange = null;
+      }
       if (closed) return;
       s.building = false;
       fail(error);
@@ -534,7 +587,8 @@ export function showColdSend(opts) {
         <p class="cold-step-note">KasSigner shows what it is signing. Check it matches, sign, then scan the signed transaction it shows.</p>
         ${folded ? `
           <p class="cold-fee-warning" role="note">This fee includes ${esc(kasText(s.unsigned.foldedChangeSompi))} of change that is too small for the network to accept as its own output, so it goes to the network instead of back to this address.</p>` : ""}
-        ${summaryCardHtml()}`,
+        ${summaryCardHtml()}
+        ${s.unsigned.isQuantumSource ? quantumNoteHtml(s.unsigned) : ""}`,
       onBack: () => go("review"),
       onCancel: cancel,
       continueTitle: "Scan Signed Transaction",
@@ -552,8 +606,53 @@ export function showColdSend(opts) {
         button.setAttribute("aria-label", s.playing ? "Pause" : "Play");
       };
     }
+    // Sign Without the Address Number: the same transaction, its 0x06 request with no KCC-3 hint, so
+    // the unit searches its quantum addresses itself
+    const noNumber = step.body.querySelector("#sign-no-number");
+    if (noNumber) {
+      noNumber.onclick = () => {
+        try {
+          const withoutHint = { ...s.unsigned, quantumUnitIndex: null };
+          s.frames = chunkQrFrames(unsignedToKsptBytes(withoutHint));
+          s.unsigned = withoutHint;
+          s.frameIndex = 0;
+          s.playing = true;
+          drawQr();
+        } catch (error) {
+          stopTimer();
+          fail(error);
+        }
+      };
+    }
     drawFrame();
     startTimer();
+  };
+
+  /** What is different about a send from a quantum-resistant address (K iOS 961fc05a
+   *  quantumSendNote): the unit must know KCC-3, every coin goes, and where the change goes - named,
+   *  since KasSigner marks it as change only for its change addresses #0-4. */
+  const quantumNoteHtml = (unsigned) => {
+    // a quantum compound's only output is the fresh address it moves to
+    const ownOutput = compound ? s.reservedChange : unsigned.changeAddress;
+    const record = ownOutput ? quantum?.records.find((r) => r.address === String(ownOutput).toLowerCase()) : null;
+    return `
+      <div class="glass cold-quantum-note">
+        <p class="cold-quantum-note-line"><span class="accent">${SF.shieldSmall}</span><span>Needs KasSigner v1.1 or later, which signs quantum-resistant (KCC-3) addresses.</span></p>
+        ${unsigned.coinsLeftBehind > 0 ? `
+          <p class="cold-quantum-note-line warn"><span>${SF.warning}</span><span>This address holds more coins than one transaction can spend: ${esc(String(unsigned.coinsLeftBehind))} stay behind the key this send puts on chain. Send them on in another transaction right after.</span></p>` : ""}
+        ${ownOutput ? `
+          <div class="cold-quantum-note-line"><span class="accent" aria-hidden="true">↩</span><span>
+            ${compound ? "The coins move to your quantum address:" : "The change goes to your quantum address:"}
+            <strong>${esc(quantum.labelOf(ownOutput))}</strong>
+            <span class="mono tiny">${esc(`${ownOutput.slice(0, 14)}...${ownOutput.slice(-8)}`)}</span>
+            ${unitMarksAsChange(record)
+              ? "<span>KasSigner shows this output as change.</span>"
+              : '<span class="cold-quantum-warn">KasSigner will show this output as an ordinary payment, not as change: check it is this address before you sign.</span>'}
+          </span></div>` : ""}
+      </div>
+      ${Number.isInteger(unsigned.quantumUnitIndex) ? `
+        <button type="button" class="ios-capsule cold-quantum-no-number" id="sign-no-number">Sign Without the Address Number</button>
+        <p class="cold-step-note">If KasSigner refuses this request, the address number may be wrong. Without it, the unit looks for the address itself. Edit Address Number puts it right for next time.</p>` : ""}`;
   };
 
   let timer = null;
@@ -658,6 +757,14 @@ export function showColdSend(opts) {
     const spends = (s.unsigned.inputs || []).map((input) => `${input.prevTxId}:${input.prevIndex}`);
     try {
       const txid = String(await broadcastSigned({ engine: await getEngine(), unsigned: s.unsigned, decoded: s.decoded }) || "");
+      if (s.unsigned.isQuantumSource) {
+        // The quantum address that took the change (or the compound) is used from now on, whatever
+        // the history API says until it indexes the transaction; it stays reserved for this popup.
+        // The source's key is on chain now: its shield is slashed and it is never change again.
+        s.sent = true;
+        await markQuantumAddress("used", compound ? s.reservedChange : s.unsigned.changeAddress);
+        await markQuantumAddress("spent", from);
+      }
       await wallet.holdSubmittedCoins(spends, from);
       if (closed) return;
       s.broadcasting = false;
@@ -705,6 +812,17 @@ export function showColdSend(opts) {
 
   // --- start --------------------------------------------------------------------------------
   const loadCompound = async () => {
+    if (quantum && !s.reservedChange) {
+      // Compounding reveals the key, so the merged coin must not stay here: it goes to an unused
+      // quantum address of the account, reserved now and kept for the flow.
+      const fresh = await freshQuantumChange(quantum.records, from).catch(() => null);
+      if (closed) { releaseQuantumChange(fresh); return; }
+      if (!fresh) { if (flow.current === "review") fail(new Error(QUANTUM_COMPOUND_NEEDS_FRESH_ADDRESS)); return; }
+      s.reservedChange = fresh;
+      s.toInput = fresh;
+      s.recipient = { address: fresh, domain: null, tld: null };
+      paint();
+    }
     try {
       const { utxoKeys, hasMore } = await compoundInputs({ engine: await getEngine(), fromAddress: from });
       if (closed) return;

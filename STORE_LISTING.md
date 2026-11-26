@@ -42,10 +42,11 @@ as K on iPhone and KaChat on Android and desktop.
   site
 - Contacts: save the people you pay by address or name
 - Your Usernames: your .kachat names, and claim one
-- Cold Storage: watch a KasSigner account by its kpub and send from it by signing on the device -
-  the transaction goes out and the signature comes back as animated QR codes
+- Cold Storage: watch a KasSigner account by its kpub, and its quantum-resistant addresses, and send
+  from it by signing on the device - the transaction goes out and the signature comes back as
+  animated QR codes
 - Portfolio: up to five portfolios of buys and sells, price and value charts, profit and loss,
-  network hashrate, CSV import/export, and import from any Kaspa address
+  CSV import/export, and import from any Kaspa address
 - Several accounts in one wallet
 - Connect to Kaspa websites: they ask, you approve every connection, payment and signature
 - Your 12 or 24 words are encrypted with your password and never leave your computer

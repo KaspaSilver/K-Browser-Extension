@@ -19,7 +19,6 @@ export const SF = {
   arrowDownRight: (size = 12) => svg('<path d="M7 7l10 10M17 8v9H8"/>', { size, width: 3 }),
   arrowRight: (size = 10) => svg('<path d="M4 12h16M13 5l7 7-7 7"/>', { size, width: 2.4 }),
   chartUptrend: (size = 16) => svg('<path d="M3 3v18h18"/><path d="M6 15l4-4 3 3 6-6"/><path d="M15 8h4v4"/>', { size }),
-  pickaxe: (size = 20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(45 12 12)" fill="currentColor"><path d="M1.2 9.6C6 1 18 1 22.8 9.6C18 6.6 6 6.6 1.2 9.6Z"/><path d="M10.5 5.4h3l-.4 16a1.1 1.1 0 0 1-2.2 0Z"/></g></svg>`,
   downCircleFill: (size = 26) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="currentColor"/><path d="M12 6.5v10M7.8 12.5l4.2 4.2 4.2-4.2" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   upCircleFill: (size = 26) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="currentColor"/><path d="M12 17.5v-10M7.8 11.5l4.2-4.2 4.2 4.2" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   warnFill: (size = 12) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5L1.5 21h21L12 2.5z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 9.5v5M12 17.6v.3" stroke="#000" stroke-width="2.3" stroke-linecap="round"/></svg>`,

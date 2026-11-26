@@ -53,7 +53,7 @@ body.tab #app[data-screen="portfolio-editor"] { height: calc(100vh - 48px); }
 .pf-change.down { color: var(--pf-red); }
 .pf-change svg { flex: none; }
 
-/* --- Launcher squares and the hashrate card ------------------------------------------------ */
+/* --- Launcher squares ------------------------------------------------ */
 .pf-squares { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 5px 12px; }
 .pf-square { height: 156px; padding: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; color: var(--text); text-align: left; font-weight: 400; min-width: 0; }
 .pf-square-head { display: flex; align-items: center; gap: 8px; width: 100%; }
@@ -62,11 +62,6 @@ body.tab #app[data-screen="portfolio-editor"] { height: calc(100vh - 48px); }
 .pf-logo30 { width: 30px; height: 30px; }
 .pf-square-value { font-size: 22px; font-weight: 700; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .pf-square .pf-tiny { line-height: 1.2; }
-.pf-hash-card { margin: 5px 12px; padding: 14px; display: flex; align-items: center; gap: 12px; color: var(--text); text-align: left; font-weight: 400; width: calc(100% - 24px); }
-.pf-hash-icon { width: 30px; display: inline-flex; justify-content: center; flex: none; }
-.pf-hash-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.pf-hash-value { font-size: 20px; font-weight: 700; white-space: nowrap; }
-.pf-spark { flex: none; }
 .pf-eye { color: var(--kaspa) !important; }
 
 /* --- Transactions --------------------------------------------------------------------------- */
@@ -109,7 +104,6 @@ body.tab #app[data-screen="portfolio-editor"] { height: calc(100vh - 48px); }
 .pf-gear { color: var(--kaspa) !important; top: 6px; }
 .pf-chart-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .pf-ch-title { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 600; }
-.pf-pick { display: inline-flex; }
 .pf-big-row { background: transparent; padding: 0; border-radius: 0; display: flex; align-items: center; gap: 10px; color: var(--text); text-align: left; font-weight: 400; max-width: 100%; min-width: 0; }
 .pf-big { font-size: 34px; font-weight: 700; letter-spacing: -.4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .pf-chip { display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--muted); background: rgba(152, 152, 159, .14); }
@@ -150,13 +144,6 @@ body.tab #app[data-screen="portfolio-editor"] { height: calc(100vh - 48px); }
 .pf-stat-value { font-size: 17px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 .pf-stat-value.up { color: var(--pf-green); }
 .pf-stat-value.down { color: var(--pf-red); }
-.pf-mine-input { display: flex; align-items: center; gap: 10px; }
-.pf-mine-input input { flex: 1; min-width: 0; padding: 8px 12px; border-radius: 12px; border: 0; background: var(--pf-fill); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.pf-units { width: 172px; flex: none; grid-template-columns: repeat(3, 1fr); }
-.pf-units button { font-size: 12px; padding: 6px 2px; white-space: nowrap; }
-.pf-payouts { display: flex; flex-direction: column; gap: 8px; }
-.pf-payout { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 15px; }
-.pf-payout-value { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 
 /* --- Sheets --------------------------------------------------------------------------------- */
 .pf-panel.pf-medium { min-height: 50%; }

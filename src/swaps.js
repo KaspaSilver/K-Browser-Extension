@@ -38,6 +38,7 @@ import {
 } from "../shared/engine/kusdt-trade.js";
 import { formatKusdt, typedKusdt, KUSDT_TOKEN } from "../shared/engine/kusdt.js";
 import { approvalRows, approvalWarnings, approvalBlocked, APPROVE_ARM_MS, APPROVAL_TEXT } from "../shared/ui/swap-approval.js";
+import { kusdt } from "./kusdt.js";
 import { swapTrade, runKusdtSwap, kusdtFromChoices, noteKusdtSwap, trestlyTermsUrl, kusdtUnitsAt, kusdtHoldingsFresh } from "./swap-kusdt.js";
 import { extraIdName, checkPayoutExtraId, withPayoutExtraId, payoutExtraIdKept, swapAnswerMatches } from "./swap-extra-id.js";
 
@@ -405,8 +406,12 @@ export async function showSwap({ coin = null, buying = false } = {}) {
       });
       const record = kusdtSwapRecord(done);
       noteKusdtSwap({ record, target, owner });
-      // the balances are read again once the trade has had a moment to land (K-Desktop d115548)
-      setTimeout(() => { if (handle?.isOpen()) refreshKusdtBalances(); }, 4500);
+      // The address's KAS and kUSDT moved: read again after each of the wallet's lookups, which
+      // follow the trade until its coins show (K 961fc05a TokenWallet.followTrade, K-Desktop
+      // 9c30208); a trade with no txid gets one look.
+      const txid = typeof done?.result?.txid === "string" ? done.result.txid : null;
+      if (txid) kusdt().followTrade(txid, { onLook: () => { if (handle?.isOpen()) refreshKusdtBalances(); } });
+      else setTimeout(() => { if (handle?.isOpen()) refreshKusdtBalances(); }, 4500);
       toast(record?.text || "Swap sent");
       state.amountText = ""; state.receiveAmountText = ""; state.kusdtQuote = null;
       state.estimate = { status: "idle" };

@@ -63,7 +63,7 @@ import { shownActiveAccount, SWITCHED_ELSEWHERE } from "./account-scope.js";
 import { sompiFromUserText } from "./amounts.js";
 import { showAddToPortfolio } from "./portfolio.js";
 import { loadOwnAddresses, ownAddressLabel } from "./own-addresses.js";
-import { ownHistoryAmount } from "./history-amount.js";
+import { ownHistoryAmount } from "../shared/engine/history-amounts.js";
 import { bindSwipeToHide } from "./swipe-hide.js";
 import { kusdtListedIndices } from "./kusdt.js";
 import { KUSDT_LISTED_HIDE_MESSAGE, KUSDT_LISTED_ALERT_TITLE } from "../shared/ui/kusdt-wallet.js";
@@ -201,20 +201,21 @@ function historyHtml(state) {
 /**
  * What a history row shows: Sent (what went to others), Moved (all of it to your own addresses) or
  * Received. A swap also spends the pool's coins, so an outgoing row counts only what left this
- * wallet (K iOS 961fc05a ownHistoryAmount); a swap that paid you Kaspa reads Received.
+ * wallet (K iOS 961fc05a ownHistoryAmount, K-Desktop's engine/history-amounts.js); a swap that
+ * paid you Kaspa reads Received.
  */
 function historyRow(tx, address) {
   let direction = tx.direction;
   let amountSompi = tx.amountSompi;
   let breakdown = direction === "out" ? outgoingBreakdown(tx, address) : null;
   if (breakdown) {
-    const own = ownHistoryAmount(tx, address, {
+    const own = ownHistoryAmount(tx.flows, address, {
       toOthers: breakdown.toOthers,
       ownChange: breakdown.changeTotal,
       isOwnAddress: (other) => ownAddressLabel(other) != null,
     });
-    if (own?.direction === "out") breakdown = { ...breakdown, toOthers: own.amountSompi };
-    else if (own?.direction === "in") { direction = "in"; amountSompi = own.amountSompi; breakdown = null; }
+    if (own?.isOutgoing) breakdown = { ...breakdown, toOthers: own.amountSompi };
+    else if (own) { direction = "in"; amountSompi = own.amountSompi; breakdown = null; }
   }
   const moved = Boolean(breakdown) && breakdown.toOthers === 0n && breakdown.changeTotal > 0n;
   if (breakdown) amountSompi = moved ? breakdown.changeTotal : breakdown.toOthers;
