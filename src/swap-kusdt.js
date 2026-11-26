@@ -18,6 +18,7 @@ import { isQuantumIndex } from "../shared/engine/quantum.js";
 import { kusdtDeployment } from "../shared/engine/kusdt.js";
 import { kusdtWalletCore } from "../shared/engine/kusdt-wallet-core.js";
 import { createTrestlyTrade } from "../shared/engine/kusdt-trade.js";
+import { coinsInUseReason, enqueueSend } from "../shared/engine/transactions.js";
 import { activityId } from "../shared/engine/kusdt-store.js";
 import { holdingIdFor } from "../shared/ui/kusdt-wallet.js";
 
@@ -31,8 +32,20 @@ function tradeDeps() {
     network: () => NETWORK_ID,
     apiUrl: () => getEndpoint("trestlyApi") || kusdtDeployment(NETWORK_ID).apiBase,
     storage: globalThis.localStorage,
-    // every coin the node lists there, held ones included (a hold ends once one is really gone)
-    outpointsOf: (address) => wallet.outpointsAt(address),
+    // every coin the node lists there, held ones included (a hold ends once one is really gone);
+    // every window's holds are read first, for coinsInUse right after
+    outpointsOf: async (address) => {
+      await wallet.refreshCoinHolds();
+      return wallet.outpointsAt(address);
+    },
+    // Trestly's code picks its own coins: a trade from an address where one of K's sends still
+    // needs a listed coin is refused, nothing sent (K-Desktop 522623c, audit 2026-11-25 #31). The
+    // engine's reserved list here is the extension's send holds (there are no scheduled KaPosts),
+    // so every match reads "held", never the engine's scheduled-post words.
+    coinsInUse: (keys) => (coinsInUseReason(keys) ? "held" : null),
+    // the per-address send queue (the engine's default), named here: a send and a trade never
+    // pick the same coin
+    queue: enqueueSend,
     secretFor: (target) => {
       const key = unlocked;
       unlocked = null;

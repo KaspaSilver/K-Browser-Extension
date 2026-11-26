@@ -614,6 +614,11 @@ async function holdCoins(keys, address) {
     logWarn("[KaPay] couldn't keep a send's coins for other windows:", error);
   }
 }
+/** Reads every window's holds again and hands them to the engine, whose coinsInUseReason then
+ *  knows them (Swap's kUSDT trade, K-Desktop 522623c audit 2026-11-25 #31). */
+export async function refreshCoinHolds() {
+  try { await currentHolds(); } catch { /* the holds this page has stand */ }
+}
 /** How many of `address`'s coins the last send holds (as last read). */
 export function heldCoinCount(address) { return heldCountAt(spentCoins, address); }
 export { HELD_COINS_MESSAGE };

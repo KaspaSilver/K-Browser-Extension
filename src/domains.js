@@ -50,8 +50,18 @@ export function showDomains({ address, onBack }) {
 // --- Unfinished transfers (audit EXT-005) ----------------------------------------------------
 // A transfer whose commit went out but whose reveal didn't (a closed popup, a refused reveal) is
 // kept in storage; Finish Transfer reveals it with the key that sent it. Its 2 KAS are safe.
+// A reveal that went out keeps its record until later looks find the commit spent, since the
+// mempool can still drop it (K-Desktop 522623c, audit 2026-11-25 #18): that card only waits, and
+// the Wallet tab's recovery clears it (or sends the reveal again).
 
 function pendingCardHtml(record) {
+  if (record.status === "reveal-sent") {
+    return `
+    <div class="glass pending-transfer">
+      <div class="strong small">Transfer finishing: ${esc(record.domain || "domain")}</div>
+      <div class="muted tiny">To ${esc(wallet.shortAddress(record.recipient || ""))}. The reveal was sent and is waiting for a block; your 2 KAS come back with it. This clears on its own.</div>
+    </div>`;
+  }
   return `
     <div class="glass pending-transfer">
       <div class="strong small">Unfinished transfer: ${esc(record.domain || "domain")}</div>

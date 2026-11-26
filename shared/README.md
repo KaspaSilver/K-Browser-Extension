@@ -11,4 +11,4 @@ message.
 | `kusdt/` | kUSDT's transaction builder: Trestly's KCC-20 WebAssembly (`kusdt_wasm_bg.wasm`, 7.9 MB, checked against its pinned SHA-256 before it compiles), its patched loader, the pinned covenant template, `VERSION`, `LICENSE` and `SHA256SUMS`, as K-Desktop records them; and Trestly's pool code for Swap (`kusdt-wallet.js`, pinned in `SHA256SUMS`). |
 | `kaspa/` | The rusty-kaspa WASM SDK (`kaspa.js`, `kaspa_bg.wasm`, ISC licence), prebuilt, with its provenance (`VERSION`: SDK 2.0.1, toolchain, local glue patches, and what isn't known) and checksums (`SHA256SUMS`; `shasum -a 256 -c SHA256SUMS`), as KaChat-Desktop records them. |
 
-Copied from K-Desktop (KaChat-Desktop) 9c30208.
+Copied from K-Desktop (KaChat-Desktop) 522623c.
