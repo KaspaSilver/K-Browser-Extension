@@ -22,7 +22,6 @@
 // keeps only the pages that need no account, as on iOS.
 
 import * as vault from "./vault.js";
-import { showsKachatEndings, setShowsKachatEndings } from "./kachat-label.js";
 import * as wallet from "./wallet.js";
 import { ext, tellBackground } from "./browser.js";
 import {
@@ -278,18 +277,9 @@ async function showCustomization({ onBack }) {
         ${rowHtml("currency", "", "Currency", currencyLabel(current))}
       </div>
       <p class="form-footer">Used for the value shown beside amounts. Prices come from CoinGecko.</p>
-      <div class="glass list">
-        <button class="list-row settings-row" id="kachat-endings" role="switch" aria-checked="${showsKachatEndings()}">
-          <span class="settings-label"><span>Show .kachat Endings</span></span>
-          <span class="toggle ${showsKachatEndings() ? "on" : ""}"></span>
-        </button>
-      </div>
-      <p class="form-footer">Turn off to show names like alice instead of alice.kachat. A name you gave someone yourself never has the ending.</p>
     </section>`, "settings");
   $("#back").onclick = onBack;
   $("#currency").onclick = () => showCurrencyPicker({ current, onBack: () => showCustomization({ onBack }) });
-  // K iOS KachatEndingsToggle
-  $("#kachat-endings").onclick = () => { setShowsKachatEndings(!showsKachatEndings()); showCustomization({ onBack }); };
 }
 
 function showCurrencyPicker({ current, onBack }) {

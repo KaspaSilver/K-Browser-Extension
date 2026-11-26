@@ -23,7 +23,7 @@ import * as vault from "./vault.js";
 import * as wallet from "./wallet.js";
 import { heldCoinsError } from "./send-coins.js";
 import { kachatNames, kachatProfiles, kachatRegistry, kachatLaunched, prepareSigner, prepareOfferSigners } from "./kachat-names.js";
-import { SYMBOLS, openPanel, kachatWordmark, showTileSheet } from "./kachat-ui.js";
+import { SYMBOLS, openPanel, showTileSheet } from "./kachat-ui.js";
 import { Operation, Stage, isOpen, needsDriving, KachatNamesActions, FeeTier, FeeChoice, TxStage } from "../shared/engine/kachat-names/actions.js";
 import { FEE_TIERS, feeControlsHtml, recipientCardHtml, recipientStatusHtml, recipientLookup, bindAddressBookButton } from "./send-pieces.js";
 import {
@@ -319,7 +319,7 @@ function eventRowHtml(event, showName = false) {
     <div class="km-row">
       <span class="accent km-icon">${EVENT_ICONS[event.op] || SYMBOLS.hand}</span>
       <span class="tx-meta">
-        <span class="strong small ellipsis">${esc(EVENT_TITLES[event.op] || "Activity")}${showName && event.name ? ` ${esc(event.name)}.kachat` : ""}</span>
+        <span class="strong small ellipsis">${esc(EVENT_TITLES[event.op] || "Activity")}${showName && event.name ? ` ${esc(event.name)}` : ""}</span>
         <span class="muted tiny ellipsis">${to ? `→ ${esc(to)} ` : ""}${event.at != null ? esc(relative(event.at)) : ""}</span>
       </span>
       ${trailing}
@@ -672,14 +672,14 @@ export function searchResultHtml(typed) {
     // no price here: a name's first year and later years cost differently (the claim's "For how
     // long?" shows each, KaPay 05db583)
     body = `
-      <span class="tx-meta">${title(`${name}.kachat`)}<span class="tiny kl-green">Available</span></span>
+      <span class="tx-meta">${title(name)}<span class="tiny kl-green">Available</span></span>
       <button class="km-prominent small-button" id="claim" ${s.gap ? "" : "disabled"}>Claim</button>`;
   } else if (s.kind === "invalid" && s.name === name) {
-    body = `<span class="tx-meta">${title(`${name}.kachat`)}<span class="muted tiny">${esc(invalidReason(name) || "Not a valid name.")}</span></span>`;
+    body = `<span class="tx-meta">${title(name)}<span class="muted tiny">${esc(invalidReason(name) || "Not a valid name.")}</span></span>`;
   } else if (s.kind === "failed" && s.name === name) {
-    body = `<span class="tx-meta">${title(`${name}.kachat`)}<span class="muted tiny">${esc(s.message)}</span></span>`;
+    body = `<span class="tx-meta">${title(name)}<span class="muted tiny">${esc(s.message)}</span></span>`;
   } else {
-    body = `<span class="tx-meta">${title(`${name}.kachat`)}</span><span class="spinner small-spin"></span>`;
+    body = `<span class="tx-meta">${title(name)}</span><span class="spinner small-spin"></span>`;
   }
   return `<div class="km-card km-search-result">${body}</div>`;
 }
@@ -751,7 +751,7 @@ function registrationCardHtml(r) {
     }
     return `
       <div class="km-card kl-reg">
-        <div class="kl-reg-head"><span class="km-title">${esc(r.name)}.kachat</span>${icon}</div>
+        <div class="kl-reg-head"><span class="km-title">${esc(r.name)}</span>${icon}</div>
         <div class="muted small">${unitText(esc(stage))}</div>
         ${progress}
         ${message ? `<div class="error-text tiny">${esc(message)}</div>` : note ? `<div class="muted tiny">${esc(note)}</div>` : ""}
@@ -838,7 +838,7 @@ export function openRegistrationProgress(id) {
     const backdrop = document.createElement("div");
     // Not a .sheet-backdrop: the action sheets replace those, and this one stays up over them.
     backdrop.className = "kl-progress-backdrop";
-    backdrop.innerHTML = `<div class="sheet kl-progress" role="dialog" aria-modal="true" aria-label="${esc(`Claiming ${r.name}.kachat`)}"></div>`;
+    backdrop.innerHTML = `<div class="sheet kl-progress" role="dialog" aria-modal="true" aria-label="${esc(`Claiming ${r.name}`)}"></div>`;
     // closing it leaves the claim running (iOS b219bb0)
     backdrop.addEventListener("click", (event) => {
       if (event.target === backdrop || event.target.closest("[data-progress-close]")) { closeProgress(); runtimeActions()?.clearAutoPresented?.(); }
@@ -871,7 +871,7 @@ function paintProgress(r) {
   const sheet = progressSheet.el.querySelector(".kl-progress");
   sheet.innerHTML = `
     <div class="sheet-grabber"></div>
-    <div class="sheet-title center-text">${esc(`Claiming ${r.name}.kachat`)}</div>
+    <div class="sheet-title center-text">${esc(`Claiming ${r.name}`)}</div>
     ${registrationCardHtml(r)}
     ${needsDriving(r) ? `<p class="muted tiny center-text">${esc(KEEP_OPEN_NOTE)}</p>` : ""}
     <button class="bar-text strong" data-progress-close>Close</button>`;
@@ -933,12 +933,11 @@ function bindRegistrationCards(container) {
 // --- Hub: pages (iOS KachatLiveMarketPage / AvailablePage / ActivityPage, 0765ce0 / eea52b2) -
 
 /** A square tile for one name (iOS KachatNameTile, 27a4f39 / c488d1d): centered - the full name
- *  (it wraps and the tile grows, never truncated), ".kachat" under it, then the footer (the price
- *  asked, and any button). `nameHtml` is trusted markup. */
+ *  (it wraps and the tile grows, never truncated; never the ".kachat" ending, K iOS 522fd9f4), then
+ *  the footer (the price asked, and any button). `nameHtml` is trusted markup. */
 export function nameTileHtml(nameHtml, footerHtml = "") {
   return `
     <span class="kl-tile-name">${nameHtml}</span>
-    <span class="kl-tile-suffix">.kachat</span>
     ${footerHtml ? `<span class="kl-tile-footer">${footerHtml}</span>` : ""}`;
 }
 
@@ -1181,7 +1180,7 @@ function offerTileHtml(offer, opts) {
       <span class="accent">${SYMBOLS.hand}</span>
       <span class="kl-tile-price">${esc(amount(offer.amount))}</span>
       <span class="muted tiny ellipsis kl-offer-who">${esc(who)}</span>
-      ${opts.showName && offer.name ? `<span class="tiny strong ellipsis">${esc(offer.name)}.kachat</span>` : ""}
+      ${opts.showName && offer.name ? `<span class="tiny strong ellipsis">${esc(offer.name)}</span>` : ""}
       ${st.statusText ? `<span class="tiny kl-orange">${esc(st.statusText)}</span>` : st.timeLeft ? `<span class="muted tiny">Expires in ${esc(st.timeLeft)}</span>` : ""}
     </button>`;
 }
@@ -1222,7 +1221,7 @@ function openOfferDetail(st) {
       <div class="kl-offer-head">
         <span class="accent">${SYMBOLS.hand}</span>
         <div class="kl-offer-amount">${esc(amount(offer.amount))}</div>
-        ${name ? `<div class="muted small">${esc(name)}.kachat</div>` : ""}
+        ${name ? `<div class="muted small">${esc(name)}</div>` : ""}
       </div>
       <div class="kl-offer-facts">
         <div class="form-row between"><span>From</span>${from}</div>
@@ -1779,7 +1778,7 @@ function openClaimSheet(target) {
 
   const reviewHtml = () => {
     const q = state.quote;
-    const rows = [textRow("Name", `${target.name}.kachat`), textRow("Length", yearsText(state.years))];
+    const rows = [textRow("Name", target.name), textRow("Length", yearsText(state.years))];
     let cost;
     if (q) {
       cost = reviewCardHtml([
@@ -1949,7 +1948,7 @@ function openClaimSheet(target) {
       question: "For how long?",
       className: "kl-claim-years-step",
       bodyHtml: `
-        <p class="kl-claim-years-name">${esc(`${target.name}.kachat`)}</p>
+        <p class="kl-claim-years-name">${esc(target.name)}</p>
         <div class="kl-claim-lengths">
           ${Array.from({ length: count }, (_, i) => {
             const y = i + 1;
@@ -1987,7 +1986,7 @@ function openClaimSheet(target) {
       bodyHtml: reviewHtml(),
       enabled: canSwipe(),
       direction,
-      getPreview: () => ({ amountSompi: state.quote?.total ?? null, recipient: `${target.name}.kachat` }),
+      getPreview: () => ({ amountSompi: state.quote?.total ?? null, recipient: target.name }),
       getFailureMessage: () => state.startError,
       onAction: () => { start(); },
       onDone: exit,
@@ -2062,7 +2061,7 @@ function openOfferSheet(name, info) {
       ? "This name is listed for less than your offer. Consider buying it instead."
       : "Your KAS stays locked on chain until the owner accepts or declines, you withdraw the offer, or it expires - then anyone can send it back to you."),
     rows: () => [
-      { title: "Name", value: `${name}.kachat` },
+      { title: "Name", value: name },
       ...(info.isListed ? [{ title: "Listed at", value: amount(info.price) }] : []),
       { title: "Expires", value: day(info.expiresAt) },
       ...(offerAmount() != null ? [{ title: "Offer", value: amount(offerAmount()) }] : []),
@@ -2086,7 +2085,7 @@ function openOfferSheet(name, info) {
         bindKeypadEntry(step, { get: () => state.typed, set: (v) => { state.typed = v; }, footnote, onChange: changed });
       },
     },
-    swipeUp: { bar: "Swipe up to Offer", labels: transactionSwipeLabels("Offer sent"), recipient: `${name}.kachat` },
+    swipeUp: { bar: "Swipe up to Offer", labels: transactionSwipeLabels("Offer sent"), recipient: name },
   });
   runtime().then((rt) => rt.engine.currentVirtualDaaScore()).then((daa) => {
     state.virtualDaa = daa;
@@ -2467,7 +2466,7 @@ export async function showLiveNameDetail({ info: initial, onBack, screen = "kach
     const who = isChatting() ? "You"
       : held?.kind === "spending" ? `Your spending address #${held.index}`
       : held?.kind === "kasSigner" ? `Your KasSigner address (${held.account} #${held.index})`
-      : state.ownerLabel ? `${state.ownerLabel}.kachat` : "";
+      : state.ownerLabel || "";
     return `
       ${sectionHeader("Owner")}
       <div class="km-card km-seller">
@@ -2693,7 +2692,7 @@ export function openProfileSaveSheet({ title, confirmTitle, doneTitle, makeProfi
           ${labeledRow("Banner", sourceText(p.banner, SocialKind.banner))}
           ${labeledRow("Bio", sourceText(p.bio, SocialKind.bio))}
           ${labeledRow("Linktree", p.linktree ? p.linktree.replace("https://", "") : "None")}
-          ${labeledRow("Primary name", kachatLaunched ? (p.primaryName ? `${p.primaryName}.kachat` : "None") : "Coming soon")}
+          ${labeledRow("Primary name", kachatLaunched ? (p.primaryName ? p.primaryName : "None") : "Coming soon")}
         </div>
       </div>` : "";
     let cost = "";
@@ -2927,7 +2926,7 @@ export function liveDomainsTab({ address, repaint, forAddress = false }) {
         ? '<p class="muted small center-text">Couldn\'t load this address\'s names. Try again in a moment.</p>'
         : forAddress
         ? `<div class="kachat-address-empty">
-            ${kachatWordmark(40)}
+            <span class="accent kachat-address-at">${SYMBOLS.at}</span>
             <div class="strong">No usernames on this address</div>
             <p class="muted small">Usernames this address owns show here.</p>
           </div>`

@@ -50,7 +50,7 @@ export function looksLikeName(input) {
 async function resolveKachat(label) {
   const canonical = kachatNormalize(label);
   if (!kachatIsValid(canonical)) return null;
-  // written as Show .kachat Endings says (K iOS NameServices: KachatNameLabel.display)
+  // shown bare, never with the ending (K iOS 522fd9f4 KachatNameLabel.display)
   const display = kachatLabel(canonical);
   const registry = kachatRegistry();
   if (!registry) return { tld: "kachat", display, address: null, failed: false, notLive: true };

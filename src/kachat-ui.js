@@ -38,11 +38,6 @@ export const SYMBOLS = {
   sent: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.4l3 3 6-6.3" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
-/** The ".kachat" wordmark (iOS KachatTabIcon): heavy rounded type in the accent colour. */
-export function kachatWordmark(side) {
-  return `<span class="kachat-wordmark" style="font-size:${Math.round(side * 0.62)}px;height:${side}px">.kachat</span>`;
-}
-
 /** An iOS sheet with its own navigation bar: Cancel on the left or Done on the right. */
 /** `stack`: open over the sheet already showing (a confirmation over an editor) instead of replacing it. */
 export function openPanel({ title, leading = null, trailing = null, body, onMount = null, onClose = null, full = false, stack = false }) {

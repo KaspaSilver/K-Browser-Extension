@@ -20,7 +20,7 @@
 // own names and the offers you made live in Your Domains.
 
 import { app, esc, render, $, ICONS, navHeader } from "./ui.js";
-import { SYMBOLS, kachatWordmark, openPanel } from "./kachat-ui.js";
+import { SYMBOLS, openPanel } from "./kachat-ui.js";
 import { kachatLive, kachatLaunched, kachatNames } from "./kachat-names.js";
 
 // Names are always bought on the chatting address (iOS 6e938ff, the owner's call): there is no
@@ -31,7 +31,6 @@ import * as dock from "./dock.js";
 import * as live from "./kachat-live.js";
 import { backupBannerHtml, bindBackupBanner } from "./account-backup.js";
 
-export { kachatWordmark };
 
 const redact = (text) => `<span class="redacted">${esc(text)}</span>`;
 const pill = () => '<span class="coming-pill">Coming soon</span>';
@@ -114,7 +113,7 @@ export function showKachatMarket({ onBack = null, search = "", scroll = 0 } = {}
     if (isLive()) return live.searchResultHtml(typed);
     return `
       <div class="km-card km-search-result">
-        <div class="tx-meta"><span class="strong ellipsis">${esc(typed)}.kachat</span><span class="muted tiny">Registration isn't open yet.</span></div>
+        <div class="tx-meta"><span class="strong ellipsis">${esc(typed)}</span><span class="muted tiny">Registration isn't open yet.</span></div>
         <button class="km-prominent small-button" disabled>Claim</button>
       </div>`;
   };
@@ -122,7 +121,7 @@ export function showKachatMarket({ onBack = null, search = "", scroll = 0 } = {}
   render(`
     <header class="navbar">
       ${onBack ? `<button class="nav-back" id="back" aria-label="Back">${ICONS.back}<span>Back</span></button>` : "<span></span>"}
-      <div class="nav-title">.kachat</div>
+      <div class="nav-title">Usernames</div>
       <div class="nav-right km-nav-actions">
         <button class="icon plain accent" id="how" aria-label="How it works">${SYMBOLS.question}</button>
       </div>
@@ -130,7 +129,7 @@ export function showKachatMarket({ onBack = null, search = "", scroll = 0 } = {}
     ${backupBannerHtml()}
     <section class="km km-hub">
       <div class="km-hero compact">
-        ${kachatWordmark(64)}
+        <div class="km-usernames-title">Usernames</div>
         <p class="muted small km-tagline">Claim your name on Kaspa</p>
         <div id="km-status">${heroStatus()}</div>
       </div>
@@ -139,7 +138,6 @@ export function showKachatMarket({ onBack = null, search = "", scroll = 0 } = {}
           <span class="accent km-search-icon">${ICONS.search}</span>
           <input id="search" type="text" value="${esc(state.search)}" placeholder="Type the name you want" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" />
           <button type="button" class="km-search-clear" id="search-clear" aria-label="Clear" ${state.search ? "" : "hidden"}>${CLEAR_ICON}</button>
-          <span class="accent strong km-search-suffix">.kachat</span>
         </label>
         <div id="search-result">${searchResult()}</div>
       </div>

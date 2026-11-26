@@ -591,8 +591,8 @@ textarea.recipient { background: transparent; border: 0; border-radius: 0; min-h
 .avatar.avatar-glyph { background: color-mix(in srgb, var(--kaspa) 20%, var(--bg)); color: var(--kaspa); display: flex; align-items: center; justify-content: center; }
 
 /* --- .kachat marketplace (iOS KachatMarketView, UI only) --------------------------------------- */
-.kachat-wordmark { display: inline-flex; align-items: center; justify-content: center; color: var(--kaspa); font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif; font-weight: 900; letter-spacing: -.02em; line-height: 1; }
-.nav-row-label .kachat-wordmark { min-width: 20px; }
+/* Usernames' header, where the ".kachat" wordmark was (K iOS 522fd9f4): heavy rounded type in the accent colour */
+.km-usernames-title { color: var(--kaspa); font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif; font-size: 34px; font-weight: 900; letter-spacing: -.02em; line-height: 1.1; }
 .coming-pill { display: inline-block; font-size: 11px; font-weight: 800; color: var(--kaspa); background: rgba(112,199,186,.15); padding: 3px 10px; border-radius: 999px; }
 /* iOS .redacted(reason: .placeholder): the text's shape as a grey bar, never the text. */
 .redacted { color: transparent !important; background: rgba(235,235,245,.18); border-radius: 4px; user-select: none; }
@@ -836,6 +836,7 @@ html:has(#app[data-screen="qr"]), body:has(#app[data-screen="qr"]) { background:
 /* iOS KachatAddressDomainsList */
 .kachat-address-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 24px 12px; }
 .kachat-address-empty p { margin: 0; }
+.kachat-address-at svg { width: 34px; height: 34px; }
 .manage-scroll > .address-tabs { margin: 0 -16px; }
 .panel.full { height: 92%; }
 /* Testnet toggle: orange, as iOS tints it */
@@ -992,7 +993,6 @@ button.sk-pill:disabled { opacity: 1; background: var(--panel) !important; color
 .kl-tile { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 140px; padding: 14px 10px; margin: 0; text-align: center; color: var(--text); font-weight: 400; }
 button.kl-tile:not(:disabled), .kl-tile-split { cursor: pointer; }
 .kl-tile-name { max-width: 100%; font-size: 16px; font-weight: 700; line-height: 21px; overflow-wrap: anywhere; }
-.kl-tile-suffix { font-size: 12px; font-weight: 600; color: var(--kaspa); }
 .kl-tile-footer { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 100%; margin-top: 8px; }
 .kl-tile-price { max-width: 100%; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kl-tile-open { position: absolute; inset: 0; margin: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }

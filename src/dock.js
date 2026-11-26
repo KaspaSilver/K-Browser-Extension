@@ -30,7 +30,7 @@ const ICON = {
 };
 
 // iOS AppTab.dock: Wallet in the middle (owner's call, 2026-10-24), Settings last (2026-10-27).
-const TABS = [["portfolio", "Portfolio"], ["cold", "Cold Storage"], ["profile", "Wallet"], ["kachat", ".kachat"], ["settings", "Settings"]];
+const TABS = [["portfolio", "Portfolio"], ["cold", "Cold Storage"], ["profile", "Wallet"], ["kachat", "Usernames"], ["settings", "Settings"]];
 
 const roots = {};
 // Tabs showing a red dot (iOS 28d9d68: Wallet, whenever the bell has something unread).

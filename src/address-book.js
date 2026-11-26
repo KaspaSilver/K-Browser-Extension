@@ -405,8 +405,8 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
     }, 350);
   };
   /** What "Use Their Username" fills in (K iOS domainSuggestion): the typed username that
-   *  resolved, in full ("alice.kachat", whatever Show .kachat Endings says - the book is shared with
-   *  K). The address's own .kachat name isn't
+   *  resolved, in full ("alice.kachat", though screens show names bare - the book is shared with
+   *  K, whose domainSuggestion keeps the ending). The address's own .kachat name isn't
    *  looked up: a saved address is never sent to a server here (EXT-011). */
   const domainSuggestion = () => {
     const r = form.resolved;

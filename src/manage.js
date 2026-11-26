@@ -52,7 +52,6 @@ function spendingReceive({ label, address, index, onBack }) {
   });
 }
 import { showSend } from "./send.js";
-import { kachatWordmark } from "./market.js";
 import { addressNamesTab, showLiveNameDetail } from "./kachat-live.js";
 import { addressDomainsTab } from "./address-domains.js";
 import { kachatRegistry } from "./kachat-names.js";

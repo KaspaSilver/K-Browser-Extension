@@ -284,7 +284,7 @@ function graceBannerHtml(s) {
       <span class="grace-icon">${ICONS.warning}</span>
       <span class="grace-text">
         <span class="strong small">${one ? "One of your usernames expired" : `${grace.length} of your usernames expired`}</span>
-        <span class="muted tiny">${esc(one ? `Renew ${grace[0].info.name}.kachat before its grace period ends on ${ends} to keep it.` : "Renew them before their grace periods end to keep them.")}</span>
+        <span class="muted tiny">${esc(one ? `Renew ${grace[0].info.name} before its grace period ends on ${ends} to keep it.` : "Renew them before their grace periods end to keep them.")}</span>
       </span>
       <button class="icon plain" id="grace-dismiss" aria-label="Dismiss">${ICONS.xCircle}</button>
     </div>`;

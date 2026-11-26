@@ -33,7 +33,6 @@ import {
   app, esc, render, $, toast, copyText, copySecret, ICONS, navHeader, showQr, showSheet, showAlert, groupedKas8, RECEIVE_NOTES, balanceCardHtml, pageCycleHtml,
 } from "./ui.js";
 import { scanQr } from "./camera.js";
-import { kachatWordmark } from "./market.js";
 import { addressNamesTab, showLiveNameDetail } from "./kachat-live.js";
 import { addressDomainsTab } from "./address-domains.js";
 import { kachatRegistry } from "./kachat-names.js";
