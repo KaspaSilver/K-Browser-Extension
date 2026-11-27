@@ -47,6 +47,7 @@ import {
 const ORDER = ["to", "from", "amount", "review", "fee"];
 /** The From address's coins couldn't be read (iOS, KaPay iOS 0799cec). */
 const COINS_UNREAD = "Couldn't load the coins at this address";
+const SENDS_TO_ITSELF = "This is the address the Kaspa is going to. Choose another address to send from.";
 /** Why Max (or Compound) isn't the whole balance: one transaction spends at most 80 coins, and this
  *  address holds more (iOS maxCappedNote, KaPay iOS 1652437). */
 const MAX_CAPPED_NOTE = `Max is what one transaction can carry: its largest ${MAX_SEND_INPUT_LIMIT} coins. Compound UTXOs combines the rest.`;
@@ -70,7 +71,8 @@ const short = (a) => `${a.slice(0, 14)}...${a.slice(-6)}`;
  * @param {boolean} [opts.lockedSource] opened from one address's own page: that address only, no
  *                                    From step (iOS 7a8102b)
  * @param {Function} opts.onClose    cancel / done
- * @param {Function} [opts.onSent]   after a successful send, before Done
+ * @param {Function} [opts.onSent]   after a successful send, before Done: ({ txid })
+ * @param {Function} [opts.onOutcomeUnknown] the send went out but the network's answer was lost: ({ txid })
  * @param {bigint} [opts.amountSompi] the amount filled in (kUSDT's Fund This Address: the shortfall)
  */
 export function showSend(opts) {
@@ -150,9 +152,13 @@ export function showSend(opts) {
     const available = spendableSompi();
     return amount != null && available != null && amount > available;
   };
+  /** From is the address the Kaspa is going to (K-Desktop 76d4a7f, audit 2026-11-27): it would only
+   *  pay a fee. Compound UTXOs is the one send to itself. */
+  const sendsToItself = () => !opts.compound && Boolean(state.recipient?.address)
+    && String(opts.fromAddress || "").toLowerCase() === String(state.recipient.address).toLowerCase();
   const canReview = () => {
     const amount = amountSompi();
-    return Boolean(state.recipient) && !state.resolving && amount != null && amount > 0n && !exceedsBalance() && !state.fillingMax;
+    return Boolean(state.recipient) && !state.resolving && amount != null && amount > 0n && !exceedsBalance() && !state.fillingMax && !sendsToItself();
   };
   // The swipe waits for a settled amount and fee (iOS canSend, KaPay iOS 0799cec): a Max or fee
   // still being worked out, or a fee that couldn't be, would send something other than the review
@@ -160,7 +166,7 @@ export function showSend(opts) {
   // their own to wait for.
   const tooManyPicked = () => (state.maxMode || opts.compound) && (state.selected?.size || 0) > MAX_SEND_INPUT_LIMIT;
   const canSend = () => {
-    if (state.sending || !state.recipient || state.resolving || state.fillingMax) return false;
+    if (state.sending || !state.recipient || state.resolving || state.fillingMax || sendsToItself()) return false;
     if (state.estimating || !state.base || state.feeError) return false;
     const amount = amountSompi();
     const fee = totalFeeKas();
@@ -571,7 +577,7 @@ export function showSend(opts) {
       bodyHtml: `${titleLine()}<div class="ss-review-stack" id="from-choice"></div><div id="from-list"></div>`,
       onBack: back ? () => go(back) : null,
       onCancel: () => opts.onClose?.(),
-      canContinue: () => !(state.choosingFrom && isChattingSource()),
+      canContinue: () => !(state.choosingFrom && isChattingSource()) && !sendsToItself(),
       onContinue: () => go("amount"),
       direction,
     });
@@ -596,7 +602,8 @@ export function showSend(opts) {
             ${available != null && isChattingSource() ? `<span class="small strong">${esc(`${trimmedKas(available)} ${KAS_UNIT}`)}</span>`
               : state.coinsUnread && isChattingSource() ? `<span class="small muted">${esc(COINS_UNREAD)}</span>` : '<span class="spinner small-spin"></span>'}
           </div>
-        </div>`}`);
+        </div>`}
+      ${sendsToItself() && !(state.choosingFrom && isChattingSource()) ? `<p class="ss-note error">${esc(SENDS_TO_ITSELF)}</p>` : ""}`);
     host.querySelector("#from-chatting").onclick = () => {
       state.choosingFrom = false;
       hideAddressList();
@@ -688,6 +695,7 @@ export function showSend(opts) {
   };
   /** Under the typed amount: what's wrong with it, else what's available. */
   const amountFootnote = () => {
+    if (sendsToItself()) return SENDS_TO_ITSELF;
     if (state.coinsUnread) return COINS_UNREAD;
     if (state.error) return state.error;
     if (exceedsBalance()) return coinsHeld() ? wallet.HELD_COINS_MESSAGE : "This is more than the address you're sending from holds.";
@@ -706,7 +714,7 @@ export function showSend(opts) {
     maxEnabled: Boolean(state.recipient) && state.coins != null,
     estimatingMax: state.fillingMax,
     footnote: amountFootnote(),
-    footnoteError: state.coinsUnread || Boolean(state.error) || exceedsBalance(),
+    footnoteError: state.coinsUnread || Boolean(state.error) || exceedsBalance() || sendsToItself(),
   });
   const requestAmountHtml = () => `
     ${reviewAmountHtml({ eyebrow: "You're sending", amountText: `${trimmedKas(amountSompi() ?? 0n)} ${KAS_UNIT}`, fiatText: reviewFiat() })}
@@ -949,7 +957,7 @@ export function showSend(opts) {
       }
       const txid = (result?.txids || [])[result?.txids?.length - 1] || "";
       // the payment is out: whatever the caller does next can't turn it into "Failed"
-      try { opts.onSent?.(); } catch (error) { logWarn("[KaPay] after a send:", error); }
+      try { opts.onSent?.({ txid }); } catch (error) { logWarn("[KaPay] after a send:", error); }
       swipe?.setSent({
         txid,
         amountSompi: result?.amountSompi ?? result?.result?.summary?.amountSompi ?? amountSompi(),
@@ -964,6 +972,9 @@ export function showSend(opts) {
       if (error?.code === MAX_AMOUNT_CHANGED && opts.compound) { compoundChanged(swipe); return; }
       if (error?.code === MAX_AMOUNT_CHANGED) { maxChanged(error, swipe); return; }
       if (error?.code === SEND_FEE_CHANGED) { feeChanged(error, swipe); return; }
+      // it went out but the network's answer was lost: it may land, so the caller treats it as
+      // sent (K iOS d88891ea onOutcomeUnknown: Swap's deposit isn't paid twice)
+      if (error?.code === SEND_OUTCOME_UNKNOWN) { try { opts.onOutcomeUnknown?.({ txid: error.txid || error.txId || "" }); } catch { /* the caller's */ } }
       logWarn("[KaPay] send failed:", error);
       state.error = friendlySendError(error);
       swipe?.setBusy(false);

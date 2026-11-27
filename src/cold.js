@@ -1,16 +1,20 @@
 // Cold Storage - a 1:1 port of the iOS tab (Views/ColdStorage/ColdStorageView.swift and
-// Services/ColdStorageManager.swift):
+// Services/ColdStorageManager.swift), on Manage Addresses' cards since K iOS b49a021d (K-Desktop
+// 9024bfe, its audit fixes 0222137):
 //
-//   ColdStorageListView          the tab root: watch-only KasSigner accounts, Paste kpub / Scan,
-//                                Enter kpub, Name This Account, the account actions sheet
-//                                (Copy kpub, Show kpub QR, Rename) and the kpub QR page
-//   ColdStorageDetailView        one account: Name, Total Balance, the addresses, and the floating
-//                                Address Actions button (Copy kpub lives there: no kpub on screen)
-//                                (Generate More, Discover, Address Visibility), its addresses
+//   ColdStorageListView          the tab root: each watch-only KasSigner account on a card (a lock
+//                                and its name, the red trash, its balance and worth, Copy kpub,
+//                                kpub QR, Rename in place, Alerts On / Off, Tap to View Addresses),
+//                                Paste kpub / Scan, Enter kpub, Name This Account, the kpub QR page
+//   ColdStorageDetailView        one account, laid out as Manage Addresses: the Total Balance card,
+//                                an address card each (Copy, Send, Receive, Rename in place), Discover
+//                                Addresses and Address Visibility at the top right, the floating +
+//                                (Regular or Quantum-Protected). The account's own actions are on
+//                                its list card only.
 //   ColdStorageAddressVisibilityView   the checklist, 50 a page, endless
-//   ColdStorageAddressTransactionHistoryView   one address: History | UTXOs | .kachat,
-//                                Receive / Send, the Transaction sheet (Add to Portfolio),
-//                                Compound UTXOs, Rename UTXO
+//   ColdStorageAddressTransactionHistoryView   one address: the full address on its balance card,
+//                                History | UTXOs | Usernames, the Transaction sheet (Add to
+//                                Portfolio), Compound UTXOs, Rename UTXO; no Send / Receive bar
 // The KasSigner send flow is in cold-send.js.
 //
 // A cold account is a kpub (account m/44'/111111'/0'): the receive chain (kpub -> 0 -> i) is
@@ -18,8 +22,9 @@
 // QR exchange. Since K iOS 961fc05a (K-Desktop 9c30208) an account also watches KasSigner v1.1's
 // quantum-resistant (KCC-3) addresses, each scanned or pasted from the unit (it never exports their
 // 22' kpub): they list after the derived ones, a send from one spends every coin and puts its change
-// on another unused quantum address of the account, and the request is KSPT 0x06. Accounts are kept per wallet account, like iOS keeps them
-// per wallet. Left out: the per-account receive notifications toggle (the extension has none).
+// on another unused quantum address of the account, and the request is KSPT 0x06. Accounts are kept
+// per wallet account, like iOS keeps them per wallet. An account's Alerts On / Off is whether the
+// bell notes the Kaspa it receives (coldWatchAddresses, K iOS notifyOnReceive).
 
 import { netKey } from "./net.js";
 import { ownsAnyName } from "./names.js";
@@ -38,9 +43,14 @@ import { addressDomainsTab } from "./address-domains.js";
 import { kachatRegistry } from "./kachat-names.js";
 import { showAddToPortfolio } from "./portfolio.js";
 import { showColdSend } from "./cold-send.js";
-import { unreadableBalanceHtml, addressOptionsButtonHtml, showAddressActions, showPublicKey, fiatTextFor, addressActionsFabHtml } from "./manage.js";
+import {
+  unreadableBalanceHtml, addressOptionsButtonHtml, showAddressActions, showPublicKey, fiatTextFor, quantumShieldHtml,
+  managedAddressCardHtml, quantumTagHtml,
+} from "./manage.js";
 import { SF, txDate, feeText, portfolioKas, middle, shortAddress, fieldSheet, xOnlyKeyFromAddress } from "./cold-common.js";
-import { quantumShieldHtml } from "./manage.js";
+// Rename in place and swipe left to hide, as Manage Addresses has both (K iOS b49a021d)
+import { startInlineRename, inlineRenameActive } from "./inline-rename.js";
+import { bindSwipeToHide } from "./swipe-hide.js";
 import { knownSpentQuantum, coldQuantumSpentState } from "./cold-quantum-state.js";
 import { isScriptHashAddress, isValidKaspaAddress } from "../shared/ui/kspt.js";
 import {
@@ -80,16 +90,27 @@ function normalize(raw) {
   };
 }
 
-// bell / bell.slash: Receive Notifications on an account's actions
-const BELL = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>';
-const BELL_SLASH = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 5.6A6 6 0 0 1 18 11v4M6 11v5l-1.5 2H17"/><path d="M10 20.5a2 2 0 0 0 4 0M3 3l18 18"/></svg>';
+// The account screen's top right and floating + (Manage Addresses' arrow.clockwise, checklist and
+// plus, K iOS b49a021d)
+const DISCOVER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>';
+const VISIBILITY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 6 1.6 1.6L8 4.8M3.5 12l1.6 1.6L8 10.8M3.5 18l1.6 1.6L8 16.8M11 6.2h9.5M11 12.2h9.5M11 18.2h9.5"/></svg>';
+const PLUS_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+// eye.slash.fill: the swipe's Hide
+const EYE_SLASH_FILL = '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7c1.9 0 3.5-.6 4.9-1.4"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
 
-async function loadAccounts() {
+/** Reads the stored list with the key it was read under. The key comes back with the list, never
+ *  from `store` afterwards: the bell's background read (coldWatchAddresses) replaces `store`
+ *  meanwhile (K-Desktop 0222137: a background read never replaces the live accounts). */
+async function readStore() {
   const key = await storageKey();
   const raw = await getLocal(key);
   const accounts = Array.isArray(raw) ? raw.map(normalize).filter(Boolean) : [];
   store = { key, accounts };
-  return accounts;
+  return { key, accounts };
+}
+
+async function loadAccounts() {
+  return (await readStore()).accounts;
 }
 
 /** Every watched KasSigner address (0...maxAddressIndex of each account), for the .kachat names
@@ -114,13 +135,31 @@ export async function coldWatchAddresses() {
   return out;
 }
 
-/** Writes the list back under the key it was read from (`key`, from loadAccounts' store), never one
- *  worked out again: an account switched in another window meanwhile would otherwise get this
- *  account's watch list (audit 2026-11-13). */
+/** Writes the list back under the key it was read from (`key`, from readStore), never one worked
+ *  out again: an account switched in another window meanwhile would otherwise get this account's
+ *  watch list (audit 2026-11-13). */
 async function saveAccounts(accounts, key) {
   if (!key) throw new Error("Cold Storage list written without the account it was read for.");
   store = { key, accounts };
   await setLocal(key, accounts);
+}
+
+// One write at a time, each reading the list again right before it writes (K-Desktop 0222137:
+// every action looks its account up again right before it writes). Two that overlapped - a rename
+// ending while Discover saves - would otherwise each write back a list without the other's change.
+let writing = Promise.resolve();
+
+/** Reads fresh, lets `change(accounts)` edit the list in place, writes it back - unless `change`
+ *  answers false. Resolves to what `change` answered. */
+function changeAccounts(change) {
+  const run = writing.then(async () => {
+    const { key, accounts } = await readStore();
+    const answer = await change(accounts);
+    if (answer !== false) await saveAccounts(accounts, key);
+    return answer;
+  });
+  writing = run.catch(() => {});
+  return run;
 }
 
 async function getAccount(id) {
@@ -129,24 +168,47 @@ async function getAccount(id) {
 
 /** Reads fresh, changes one account, writes back. Returns the changed account (or null). */
 async function updateAccount(id, change) {
-  const accounts = await loadAccounts();
-  const { key } = store;
-  const account = accounts.find((a) => a.id === id);
-  if (!account) return null;
-  change(account);
-  await saveAccounts(accounts, key);
-  return account;
+  let changed = null;
+  await changeAccounts((accounts) => {
+    const account = accounts.find((a) => a.id === id);
+    if (!account) return false;
+    change(account);
+    changed = account;
+    return true;
+  });
+  return changed;
 }
 
 /** iOS importAccount: a kpub already watched only takes the new name. */
-async function importAccount(kpub, label) {
-  const accounts = await loadAccounts();
-  const { key } = store;
-  const name = label.trim() || `Cold Storage ${accounts.length + 1}`;
-  const existing = accounts.find((a) => a.kpub === kpub);
-  if (existing) existing.label = name;
-  else accounts.push(normalize({ id: crypto.randomUUID(), label: name, kpub, maxAddressIndex: 0, importedAt: Date.now() }));
-  await saveAccounts(accounts, key);
+function importAccount(kpub, label) {
+  return changeAccounts((accounts) => {
+    const name = label.trim() || `Cold Storage ${accounts.length + 1}`;
+    const existing = accounts.find((a) => a.kpub === kpub);
+    if (existing) existing.label = name;
+    else accounts.push(normalize({ id: crypto.randomUUID(), label: name, kpub, maxAddressIndex: 0, importedAt: Date.now() }));
+    return true;
+  });
+}
+
+/** The account card's trash (K iOS b49a021d, K-Desktop 9024bfe), once confirmed: off K's watch list,
+ *  with its coin labels, unless another list still watches that KasSigner key (KaPay iOS 5848fb0). */
+async function removeColdAccount(accountId) {
+  let removed = [];
+  let kept = [];
+  await changeAccounts((accounts) => {
+    removed = accounts.filter((a) => a.id === accountId);
+    if (!removed.length) return false;
+    kept = accounts.filter((a) => a.id !== accountId);
+    accounts.splice(0, accounts.length, ...kept);
+    return true;
+  });
+  if (!removed.length) return;
+  accountTotals.delete(accountId);
+  await wallet.coldUtxoLabelKeys(removed).then((keys) => keys.length && removeLocal(keys)).catch(() => {});
+  // a quantum address's coin labels go with the last account watching it (K iOS 961fc05a)
+  const still = new Set(kept.flatMap((a) => a.quantumAddresses.map((q) => q.address)));
+  const orphaned = removed.flatMap((a) => a.quantumAddresses.map((q) => q.address)).filter((q) => !still.has(q));
+  if (orphaned.length) await removeLocal(wallet.utxoLabelKeysFor(orphaned)).catch(() => {});
 }
 
 function labelOf(account, index) {
@@ -245,13 +307,14 @@ async function probeUsed(address) {
   return wallet.addressUsed(address);
 }
 
-/** Hiding re-checks the live balance and fails closed (iOS setAddressHidden). */
+/** Hiding re-checks the live balance and fails closed (iOS setAddressHidden). A quantum address
+ *  files under its index as the account has it when the write lands (K-Desktop currentIndexOf):
+ *  one before it may have stopped being watched during the balance read. */
 async function setHidden(account, index, hidden) {
+  const quantumAddress = isColdQuantumIndex(index) ? account.quantumAddresses[index - COLD_QUANTUM_INDEX_BASE]?.address : null;
   if (hidden) {
     try {
-      const [address] = isColdQuantumIndex(index)
-        ? [account.quantumAddresses[index - COLD_QUANTUM_INDEX_BASE]?.address]
-        : await wallet.kpubAddresses(account.kpub, index, index + 1);
+      const [address] = isColdQuantumIndex(index) ? [quantumAddress] : await wallet.kpubAddresses(account.kpub, index, index + 1);
       if (!address) return false;
       const live = (await wallet.balancesFor([address]))[address] ?? 0n;
       if (live > 0n) return false;
@@ -259,12 +322,38 @@ async function setHidden(account, index, hidden) {
       return false;
     }
   }
-  await updateAccount(account.id, (a) => {
+  const changed = await updateAccount(account.id, (a) => {
+    const at = quantumAddress ? quantumIndexOf(a.quantumAddresses, quantumAddress) : index;
+    if (at == null) return;
     const set = new Set(a.hidden);
-    if (hidden) set.add(index); else set.delete(index);
+    if (hidden) set.add(at); else set.delete(at);
     a.hidden = [...set];
   });
-  return true;
+  return Boolean(changed);
+}
+
+/**
+ * An address holding Kaspa is never out of sight (K-Desktop 0222137, audit 2026-11-27): hiding is a
+ * display preference, never a way to lose sight of real funds, and Kaspa may land on an address
+ * after it was hidden. The hidden ones of `entries` (`{ index, address, balanceSompi }`, as read)
+ * whose balance is above zero are shown again for good, each under its index now. An unread
+ * balance never counts. True when anything changed.
+ */
+async function unhideFundedAddresses(accountId, entries) {
+  const funded = entries.filter((e) => e.balanceSompi != null && e.balanceSompi > 0n);
+  if (!funded.length) return false;
+  let changed = false;
+  await changeAccounts((accounts) => {
+    const a = accounts.find((x) => x.id === accountId);
+    if (!a || !a.hidden.length) return false;
+    const indexes = new Set(funded.map((e) => currentIndexOf(a, e)).filter((i) => i != null));
+    const hidden = a.hidden.filter((i) => !indexes.has(i));
+    if (hidden.length === a.hidden.length) return false;
+    a.hidden = hidden;
+    changed = true;
+    return true;
+  });
+  return changed;
 }
 
 /** iOS revealAddress: extends the chain to `index`, keeping the indexes in between hidden. */
@@ -407,18 +496,20 @@ async function isQuantumAddressText(address) {
 async function addQuantumAddress(accountId, text, unitIndex, chain) {
   const address = quantumAddressInput(text);
   if (!(await isQuantumAddressText(address))) return NOT_QUANTUM;
-  const accounts = await loadAccounts();
-  const { key } = store;
-  const account = accounts.find((a) => a.id === accountId);
-  if (!account) return "This account is no longer in Cold Storage.";
-  if (account.quantumAddresses.some((q) => q.address === address)) return "That address is already in this account.";
-  // one address, one account: watched twice its coins would count in both totals, and a send from
-  // one could pick it as the other's change
-  const other = accounts.find((a) => a.id !== accountId && a.quantumAddresses.some((q) => q.address === address));
-  if (other) return `That address is already in your Cold Storage account “${other.label}”.`;
-  account.quantumAddresses.push({ address, unitIndex, chain: chain === QUANTUM_CHAIN_CHANGE ? QUANTUM_CHAIN_CHANGE : QUANTUM_CHAIN_RECEIVE, addedAt: Date.now() });
-  await saveAccounts(accounts, key);
-  return null;
+  let error = null;
+  await changeAccounts((accounts) => {
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) error = "This account is no longer in Cold Storage.";
+    else if (account.quantumAddresses.some((q) => q.address === address)) error = "That address is already in this account.";
+    // one address, one account: watched twice its coins would count in both totals, and a send
+    // from one could pick it as the other's change
+    const other = !error && accounts.find((a) => a.id !== accountId && a.quantumAddresses.some((q) => q.address === address));
+    if (other) error = `That address is already in your Cold Storage account “${other.label}”.`;
+    if (error) return false;
+    account.quantumAddresses.push({ address, unitIndex, chain: chain === QUANTUM_CHAIN_CHANGE ? QUANTUM_CHAIN_CHANGE : QUANTUM_CHAIN_RECEIVE, addedAt: Date.now() });
+    return true;
+  });
+  return error;
 }
 
 /** Stops watching a quantum address (its coins stay on chain). Labels and hidden flags after it
@@ -536,8 +627,95 @@ function quantumSheet({ adding, address = "", unitIndex = null, chain = QUANTUM_
 // SCREEN 1 - the list (tab root)
 // =============================================================================================
 
+// Each account's balance on its list card (K iOS b49a021d ColdStorageListView.balances): its
+// addresses summed, hidden ones too. account id -> sompi, or null when it was never read.
+const accountTotals = new Map();
+let totalsToken = 0;
+
+/** An account's addresses: the derived ones, then the quantum ones at base + their place. */
+async function accountAddresses(account) {
+  const derived = await wallet.kpubAddresses(account.kpub, 0, account.maxAddressIndex + 1);
+  return [
+    ...derived.map((address, index) => ({ index, address })),
+    ...account.quantumAddresses.map((q, position) => ({ index: COLD_QUANTUM_INDEX_BASE + position, address: q.address })),
+  ];
+}
+
+/** The list cards' balances (K iOS b49a021d loadBalances, K-Desktop loadListBalances): the last known
+ *  at once, then each account read live (one batched call) and kept as the last known. A failed
+ *  read keeps what the card shows. */
+async function loadAccountTotals(accounts, repaint) {
+  const token = ++totalsToken;
+  let known = {};
+  try { known = (await getLocal(await knownBalancesKey())) || {}; } catch { known = {}; }
+  const reads = [];
+  for (const account of accounts) {
+    let entries;
+    try { entries = await accountAddresses(account); } catch { continue; }
+    if (accountTotals.get(account.id) == null) {
+      const figures = entries.map((e) => balanceCache.get(e.address) ?? (known[e.address] != null ? BigInt(known[e.address]) : null));
+      if (figures.some((f) => f != null)) accountTotals.set(account.id, figures.reduce((sum, f) => sum + (f ?? 0n), 0n));
+    }
+    reads.push({ account, entries });
+  }
+  if (token !== totalsToken) return;
+  repaint();
+  for (const { account, entries } of reads) {
+    let balances = null;
+    try { balances = await wallet.balancesFor(entries.map((e) => e.address)); } catch { balances = null; }
+    if (token !== totalsToken) return;
+    if (!balances) {
+      if (!accountTotals.has(account.id)) accountTotals.set(account.id, null);
+      repaint();
+      continue;
+    }
+    let total = 0n;
+    for (const entry of entries) {
+      entry.balanceSompi = balances[entry.address] ?? 0n;
+      balanceCache.set(entry.address, entry.balanceSompi);
+      total += entry.balanceSompi;
+    }
+    accountTotals.set(account.id, total);
+    keepKnownBalances(entries.map((e) => e.address));
+    // a hidden address that has since received Kaspa comes back into view (K-Desktop 0222137)
+    await unhideFundedAddresses(account.id, entries);
+    repaint();
+  }
+}
+
 export function showColdStorage() {
-  const paint = (accounts) => {
+  let accounts = store.accounts.length ? store.accounts : null;
+  const here = () => app.dataset.screen === "cold:list";
+  const repaint = () => { if (here()) paint(); };
+
+  // One account on Manage Addresses' card (K iOS b49a021d ColdStorageAccountCard, K-Desktop
+  // 9024bfe): the lock and its name, the red trash, its balance and worth, then Copy kpub, kpub QR,
+  // Rename (in place) and Alerts On / Off, and Tap to View Addresses. No ⋮: the card opens it.
+  const accountCardHtml = (account) => {
+    const total = accountTotals.get(account.id);
+    const alertsOn = account.notifyOnReceive !== false;
+    return managedAddressCardHtml({
+      attrs: `data-open="${esc(account.id)}"`,
+      leadHtml: `<span class="accent cold-card-lock" aria-hidden="true">${SF.lockFill}</span>`,
+      name: account.label,
+      cornerHtml: `<button type="button" class="icon plain cold-card-corner cold-card-trash" data-remove aria-label="Remove Cold Storage Account" title="Remove Cold Storage Account">${SF.trash}</button>`,
+      amountHtml: total === undefined ? '<span class="spinner small-spin"></span>' : total === null ? '<span class="muted">—</span>' : `${esc(groupedKas8(total))} KAS`,
+      // a price that lands late repaints this list only while it's up (K-Desktop 0222137)
+      worth: total == null ? "" : fiatTextFor(total, repaint),
+      showsUsage: false,
+      buttons: [
+        { action: "copy", icon: "copy", title: "Copy kpub" },
+        { action: "qr", icon: "qr", title: "kpub QR" },
+        { action: "rename", icon: "rename", title: "Rename" },
+        { action: "alerts", icon: alertsOn ? "bell" : "bellSlash", title: alertsOn ? "Alerts On" : "Alerts Off" },
+      ],
+      footer: "Tap to View Addresses",
+    });
+  };
+
+  const paint = () => {
+    // a card's name is being typed: the rename's end repaints (inline-rename.js)
+    if (inlineRenameActive()) return;
     const scroll = app.querySelector(".cold-scroll")?.scrollTop || 0;
     render(`
       ${dock.tabTopHtml("Cold Storage")}
@@ -548,14 +726,7 @@ export function showColdStorage() {
             <div class="cold-empty-title">No Cold Storage Accounts</div>
             <p class="muted">Scan or paste a kpub exported from your KasSigner device to watch its balance.</p>
           </div>` : ""}
-        ${(accounts || []).map((account) => `
-          <div class="glass cold-account" data-open="${esc(account.id)}" role="button" tabindex="0">
-            <span class="accent cold-account-lock">${SF.lockFill}</span>
-            <span class="tx-meta">
-              <span class="cold-account-label">${esc(account.label)}</span>
-            </span>
-            <button class="icon plain cold-more" data-more="${esc(account.id)}" aria-label="Account actions">${SF.ellipsis}</button>
-          </div>`).join("")}
+        ${(accounts || []).map(accountCardHtml).join("")}
       </div>
       <div class="ios-bottom-bar cold-list-bar">
         <button class="ios-capsule with-icon" id="paste-kpub">${SF.docOnClipboard}<span>Paste kpub</span></button>
@@ -566,14 +737,17 @@ export function showColdStorage() {
     const scroller = app.querySelector(".cold-scroll");
     if (scroller) scroller.scrollTop = scroll;
     const byId = (id) => (accounts || []).find((a) => a.id === id);
-    for (const row of app.querySelectorAll("[data-open]")) {
-      row.onclick = (event) => {
-        if (event.target.closest("[data-more]")) return;
-        showAccount({ accountId: row.dataset.open, onBack: () => showColdStorage() });
+    for (const card of app.querySelectorAll(".managed-card[data-open]")) {
+      card.onclick = (event) => {
+        const account = byId(card.dataset.open);
+        if (!account) return;
+        if (event.target.closest("[data-remove]")) { confirmRemove(account); return; }
+        const button = event.target.closest("[data-card-action]");
+        if (button) { if (!button.disabled) accountAction(account, button.dataset.cardAction, card); return; }
+        showAccount({ accountId: account.id, onBack: () => showColdStorage() });
       };
-      row.onkeydown = (event) => { if (event.key === "Enter") row.click(); };
+      card.onkeydown = (event) => { if (event.key === "Enter" && event.target === card) card.click(); };
     }
-    for (const button of app.querySelectorAll("[data-more]")) button.onclick = () => accountActions(byId(button.dataset.more));
     $("#paste-kpub").onclick = () => pasteKpub();
     $("#scan-kpub").onclick = async () => {
       const code = await scanQr({ title: "Scan QR Code", hint: "Point camera at a QR code" });
@@ -583,16 +757,64 @@ export function showColdStorage() {
 
   const refresh = async () => {
     try {
-      const accounts = await loadAccounts();
-      if (app.dataset.screen === "cold:list") paint(accounts);
+      accounts = await loadAccounts();
+      repaint();
+      loadAccountTotals(accounts, repaint);
     } catch (error) {
       toast(error.message);
     }
   };
 
   // Paints at once from what is known, then from storage.
-  paint(store.accounts.length ? store.accounts : null);
+  paint();
   refresh();
+
+  // The card's buttons (K iOS b49a021d ColdStorageAccountCard).
+  async function accountAction(account, action, card) {
+    if (action === "copy") copyKpub(account.kpub);
+    else if (action === "qr") showKpubQr({ account, onBack: () => showColdStorage() });
+    else if (action === "rename") renameAccount(account, card);
+    else if (action === "alerts") {
+      // the bell's receipts, per account (K iOS onToggleAlerts; coldWatchAddresses reads it)
+      const on = account.notifyOnReceive === false;
+      const changed = await updateAccount(account.id, (a) => { a.notifyOnReceive = on; });
+      if (!changed) { refresh(); return; }
+      toast(on ? "You'll be notified when this account receives Kaspa." : "No more notifications when this account receives Kaspa.");
+      refresh();
+    }
+  }
+
+  // In place (K iOS b49a021d InlineRename, d88891ea; K-Desktop c8e775a): saved once, when it ends;
+  // an empty name keeps the old one, Escape too.
+  function renameAccount(account, card) {
+    startInlineRename(card, {
+      key: `cold-account:${account.id}`,
+      current: account.label,
+      placeholder: account.label,
+      onChange: (text) => {
+        const name = String(text || "").trim();
+        if (!name || name === account.label) return;
+        account.label = name;
+        updateAccount(account.id, (a) => { a.label = name; }).then(refresh, (error) => toast(error.message));
+      },
+      onDone: () => paint(),
+    });
+  }
+
+  // The card's trash, after asking (K iOS b49a021d "Remove Cold Storage Account").
+  function confirmRemove(account) {
+    showAlert({
+      title: "Remove Cold Storage Account?",
+      message: "This only removes it from K's watch list. It has no effect on the KasSigner device or any funds it holds.",
+      confirmLabel: "Remove",
+      cancelLabel: "Cancel",
+      onConfirm: async () => {
+        try { await removeColdAccount(account.id); } catch (error) { toast(error.message); }
+        refresh();
+      },
+    });
+    document.querySelector(".alert-button.strong")?.classList.add("cold-destructive");
+  }
 
   // Paste kpub takes what's on the clipboard at once (K iOS b0f0a4e6): a valid kpub goes straight
   // to Name This Account, anything else is a toast. A clipboard the browser won't read opens the
@@ -641,57 +863,15 @@ export function showColdStorage() {
       },
     });
   }
-
-  function accountActions(account) {
-    if (!account) return;
-    showSheet({
-      title: account.label,
-      cancel: false,
-      rows: [
-        {
-          label: "Copy kpub", subtitle: "Puts the extended public key on the clipboard.", icon: SF.doc,
-          onClick: () => copyKpub(account.kpub),
-        },
-        {
-          label: "Show kpub QR", subtitle: "Scan it into another device to watch this account there.", icon: SF.qrcode,
-          onClick: () => showKpubQr({ account, onBack: () => showColdStorage() }),
-        },
-        {
-          label: "Rename", subtitle: "Changes the name shown for this account.", icon: SF.pencil,
-          onClick: () => fieldSheet({
-            title: "Rename Account",
-            placeholder: "Name",
-            value: account.label,
-            confirmLabel: "Save",
-            onCancel: () => accountActions(account),
-            onConfirm: async (name) => { await updateAccount(account.id, (a) => { a.label = name; }); refresh(); },
-          }),
-        },
-        // K iOS ColdStorageView: the bell's receipts, per account
-        account.notifyOnReceive === false
-          ? {
-            label: "Turn On Receive Notifications", subtitle: "Notifies you when this account receives Kaspa.", icon: BELL,
-            onClick: async () => { await updateAccount(account.id, (a) => { a.notifyOnReceive = true; }); refresh(); },
-          }
-          : {
-            label: "Turn Off Receive Notifications", subtitle: "Stops notifying when this account receives Kaspa. Other accounts keep theirs.", icon: BELL_SLASH,
-            onClick: async () => { await updateAccount(account.id, (a) => { a.notifyOnReceive = false; }); refresh(); },
-          },
-      ],
-    });
-  }
 }
 
 /** A kpub reveals every address of the account: copied like a secret, cleared 30 s later (K iOS
  *  ColdStorageClipboard.copyKpub). */
 function copyKpub(kpub) {
   // nothing on screen to select instead (K iOS b0f0a4e6 took the kpub text away)
-  return copySecret(kpub, "kpub copied to clipboard. Clipboard will clear in 30s.", "Couldn't copy the kpub. Try again, or scan it from Show kpub QR.");
+  return copySecret(kpub, "kpub copied to clipboard. Clipboard will clear in 30s.", "Couldn't copy the kpub. Try again, or scan it from kpub QR.");
 }
 
-// iOS ColdStorageKpubQRView: a white page, the kpub's QR (error correction L) in the accent
-// frame, what showing it means, "Tap anywhere to copy". No kpub text (K iOS b0f0a4e6): only the
-// QR, for scanning.
 /** A Cold Storage address's receive screen (KaPay iOS e188209): Kaspa only - Cold Storage can't
  *  move kUSDT - and its key is on the KasSigner. */
 function coldReceive({ label, address, onBack }) {
@@ -702,27 +882,60 @@ function coldReceive({ label, address, onBack }) {
   });
 }
 
+// The receive screens' note icons (ui.js NOTE_ICONS): eye.fill, checkmark.circle.fill, xmark.octagon.fill
+const KPUB_NOTE_ICONS = {
+  eye: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5C5.6 5 2 12 2 12s3.6 7 10 7 10-7 10-7-3.6-7-10-7Z" fill="currentColor"/><circle cx="12" cy="12" r="3.2" fill="var(--bg)"/></svg>',
+  allowed: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="m7.5 12.5 3 3 6-6.5" fill="none" stroke="var(--bg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warning: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.3 2.5h7.4l5.8 5.8v7.4l-5.8 5.8H8.3l-5.8-5.8V8.3Z" fill="currentColor"/><path d="m9 9 6 6M15 9l-6 6" stroke="var(--bg)" stroke-width="2.2" stroke-linecap="round"/></svg>',
+};
+
+// iOS ColdStorageKpubQRView in the receive screens' look (K iOS b49a021d, K-Desktop 9024bfe "Watch
+// This Account"): the lock and title, the account's name, the QR (error correction L: a kpub is long)
+// on a white card, what showing it means, "Tap anywhere to copy". Never the kpub as text (K iOS
+// b0f0a4e6): only the QR, for scanning.
 async function showKpubQr({ account, onBack }) {
   render(`
-    <header class="navbar qr-bar">
+    <header class="navbar">
       <button class="nav-back" id="back" aria-label="Close">${ICONS.back}<span>Close</span></button>
-      <div class="nav-title cold-nav-title">${esc(account.label)}</div>
+      <div class="nav-title"></div>
     </header>
-    <section class="qr-page cold-kpub-page" id="qr-page" title="Tap anywhere to copy">
-      <div class="qr-frame cold-kpub-frame"><canvas id="qr" width="520" height="520" aria-label="QR code for the kpub"></canvas></div>
-      <p class="cold-kpub-note">Watch-only. This cannot spend, but it reveals every address in this account.</p>
-      <p class="qr-hint">Tap anywhere to copy</p>
+    <section class="rcv cold-kpub-page" id="qr-page" title="Click anywhere to copy">
+      <div class="rcv-head"><span class="cold-kpub-icon" aria-hidden="true">${SF.lockFill}</span><h2>Watch This Account</h2></div>
+      <div class="rcv-name"><div class="rcv-label">${esc(account.label)}</div></div>
+      <div class="rcv-qr"><canvas id="qr" width="520" height="520" aria-label="QR code for this account's kpub"></canvas></div>
+      <div class="rcv-privacy cold-kpub-eye"><span class="rcv-note-icon">${KPUB_NOTE_ICONS.eye}</span><span>Watch-only. This cannot spend, but it reveals every address in this account.</span></div>
+      <p class="rcv-hint">Tap anywhere to copy</p>
+      <div class="rcv-notes">
+        <div class="rcv-note rcv-note-allowed"><span class="rcv-note-icon">${KPUB_NOTE_ICONS.allowed}</span><span>Scan it into another device to watch this account there.</span></div>
+        <div class="rcv-note rcv-note-warning"><span class="rcv-note-icon">${KPUB_NOTE_ICONS.warning}</span><span>Whoever scans it sees every address, balance and payment of this account. Show it only to devices you trust.</span></div>
+      </div>
     </section>`, "qr");
   $("#back").onclick = onBack;
-  $("#qr-page").onclick = () => copyKpub(account.kpub);
+  $("#qr-page").onclick = (event) => { if (!event.target.closest("button, a")) copyKpub(account.kpub); };
   try {
     await QRCode.toCanvas($("#qr"), account.kpub, { errorCorrectionLevel: "L", margin: 1, width: 520, color: { dark: "#000000", light: "#ffffff" } });
   } catch { /* a tap still copies it */ }
 }
 
 // =============================================================================================
-// SCREEN 2 - one account
+// SCREEN 2 - one account, laid out as Manage Addresses (K iOS b49a021d ColdStorageDetailView,
+// K-Desktop 9024bfe): the Total Balance card, an address card each, Discover Addresses and Address
+// Visibility at the top right, the floating +. The account's own actions are on its list card.
 // =============================================================================================
+
+/** A send from one of an account's addresses (its card's Send, its page's Compound). A quantum
+ *  address's send: its record (its number and chain on the unit) and the account's other quantum
+ *  addresses, read fresh, for the change (K iOS 961fc05a). */
+async function openColdSendFrom({ accountId, address, quantum, availableSompi, compound, onClose, onDone }) {
+  let quantumInfo = null;
+  if (quantum) {
+    const latest = await getAccount(accountId);
+    const record = latest?.quantumAddresses.find((q) => q.address === address.toLowerCase());
+    if (!record) { toast("This address is no longer in this account."); return; }
+    quantumInfo = { record, records: latest.quantumAddresses, labelOf: (other) => quantumLabelIn(latest, other) };
+  }
+  showColdSend({ fromAddress: address, availableSompi, compound, quantum: quantumInfo, onClose, onDone });
+}
 
 function showAccount({ accountId, onBack }) {
   const state = {
@@ -730,27 +943,37 @@ function showAccount({ accountId, onBack }) {
     entries: null,
     loading: true,
     busy: null,         // "generate"
-    discovery: null,    // { checkingIndex, foundCount }
-    summary: "",
+    discovery: null,    // { checkingIndex, foundCount }, its line under the Total Balance
     loadToken: 0,
-    spent: new Set(),   // quantum addresses whose key a spend has put on chain (the slashed shield)
+    spent: new Set(),   // quantum addresses whose key a spend has put on chain
   };
-  let actionsSheet = null;
   const here = () => app.dataset.screen === "cold:account" && app.dataset.coldAccount === accountId;
   const repaintIfHere = () => { if (here()) paint(); };
   const back = () => { paint(); load(); };
 
-  // Funded first, newest first; the quantum addresses added by scan after the derived ones in each
-  // group, in the order added (K iOS 961fc05a).
-  const visibleEntries = () => {
-    const rows = (state.entries || []).filter((e) => !e.hidden)
-      .sort((a, b) => (Number(b.balanceSompi > 0n) - Number(a.balanceSompi > 0n))
-        || (Number(Boolean(a.quantum)) - Number(Boolean(b.quantum)))
-        || (a.quantum ? a.index - b.index : b.index - a.index));
-    const active = rows.filter((e) => e.balanceSompi > 0n || domainOwners.get(e.address));
-    const fresh = rows.filter((e) => !(e.balanceSompi > 0n || domainOwners.get(e.address)));
-    return [...active, ...fresh];
+  // Used for the sort and the tag (K iOS b49a021d isUsed): ever used, holding Kaspa, or holding a
+  // username. One still being checked counts as unused until its check says otherwise.
+  const isUsed = (e) => e.balanceSompi > 0n || usedState.get(e.address) === true || Boolean(domainOwners.get(e.address));
+  const usedOf = (e) => {
+    if (e.balanceSompi > 0n || domainOwners.get(e.address)) return true;
+    const used = usedState.get(e.address);
+    return used === true || used === false ? used : null;
   };
+
+  // Manage Addresses' order (K iOS b49a021d, K-Desktop sortColdEntries): unused first, newest
+  // first, so a fresh address lands at the top, then the used ones in number order; regular ones
+  // before quantum ones in each. A hidden address holding Kaspa is shown (K-Desktop 0222137).
+  const shownEntries = () => (state.entries || [])
+    .filter((e) => !e.hidden || e.balanceSompi > 0n)
+    .sort((a, b) => {
+      const aUsed = isUsed(a);
+      const bUsed = isUsed(b);
+      if (aUsed !== bUsed) return aUsed ? 1 : -1;
+      const aQuantum = Boolean(a.quantum);
+      const bQuantum = Boolean(b.quantum);
+      if (aQuantum !== bQuantum) return aQuantum ? 1 : -1;
+      return aUsed ? a.index - b.index : b.index - a.index;
+    });
 
   async function load() {
     const token = ++state.loadToken;
@@ -771,8 +994,16 @@ function showAccount({ accountId, onBack }) {
       return;
     }
     if (token !== state.loadToken) return;
+    // a hidden address that has since received Kaspa comes back into view for good (K-Desktop
+    // 0222137: an address holding Kaspa is never out of sight)
+    if (entries.some((e) => e.hidden && e.balanceSompi > 0n) && await unhideFundedAddresses(accountId, entries)) {
+      for (const entry of entries) if (entry.balanceSompi > 0n) entry.hidden = false;
+    }
+    if (token !== state.loadToken) return;
     state.entries = entries;
     state.loading = false;
+    // the list card shows the same figure next time
+    if (entries.every((e) => e.balanceSompi != null)) accountTotals.set(accountId, entries.reduce((sum, e) => sum + e.balanceSompi, 0n));
     repaintIfHere();
     fillSpent(token);
     await fillUsed(token);
@@ -795,8 +1026,8 @@ function showAccount({ accountId, onBack }) {
     }
   }
 
-  // Used / Unused for the zero-balance rows on the list: what is known, then one bulk
-  // /addresses/active for a long list, else the transactions-count probe four at a time.
+  // Used / Unused for the zero-balance cards: what is known, then one bulk /addresses/active for a
+  // long list, else the transactions-count probe four at a time.
   async function fillUsed(token) {
     const pending = [];
     for (const entry of state.entries.filter((e) => !e.hidden && e.balanceSompi === 0n)) {
@@ -828,11 +1059,11 @@ function showAccount({ accountId, onBack }) {
     await Promise.all(Array.from({ length: 4 }, worker));
   }
 
-  // "Contains username" tags (.kachat names), after the rows are up (K iOS 518fdc8c).
+  // "Contains username" tags (.kachat names), after the cards are up (K iOS 518fdc8c).
   async function fillDomains(token) {
     let changed = false;
     try {
-      const owners = await kachatRegistry()?.ownersOfNames(state.entries.filter((e) => !e.hidden).map((e) => e.address));
+      const owners = await kachatRegistry()?.ownersOfNames(shownEntries().map((e) => e.address));
       for (const address of owners || []) {
         if (!domainOwners.get(address)) { domainOwners.set(address, true); changed = true; }
       }
@@ -840,33 +1071,32 @@ function showAccount({ accountId, onBack }) {
     if (changed && token === state.loadToken) repaintIfHere();
   }
 
-  const usedBadge = (entry) => {
-    if (entry.balanceSompi > 0n || usedState.get(entry.address) === true) return '<span class="used-badge used">Used</span>';
-    if (usedState.get(entry.address) === false) return '<span class="used-badge unused">Unused</span>';
-    return '<span class="used-badge">Checking</span>';
+  // --- the cards' actions -----------------------------------------------------------------------
+
+  /** A card's own buttons: Copy, Send, Receive, Rename (K iOS b49a021d ManagedAddressCard). */
+  const cardAction = (entry, action) => {
+    if (action === "copy") copyText(entry.address);
+    else if (action === "send" && entry.balanceSompi > 0n) {
+      openColdSendFrom({
+        accountId, address: entry.address, quantum: Boolean(entry.quantum), availableSompi: entry.balanceSompi, compound: false,
+        onClose: () => paint(), onDone: back,
+      });
+    } else if (action === "receive") coldReceive({ label: displayLabel(entry), address: entry.address, onBack: back });
+    else if (action === "rename") renameAddress(entry);
   };
 
-  // --- sheets ---------------------------------------------------------------------------------
-
-  const rowActions = (entry) => showSheet({
+  // A quantum card's ⋮ (K iOS b49a021d moreSheet): what isn't on the card itself.
+  const quantumActions = (entry) => showSheet({
     title: displayLabel(entry),
     headerHtml: `<div class="mono tiny muted">${esc(shortAddress(entry.address))}</div>`,
     cancel: false,
     rows: [
-      { label: "Rename Address", subtitle: "Gives this address a label of your own.", icon: SF.pencil, onClick: () => renameAddress(entry) },
-      { label: "Copy Address", subtitle: "Puts the full address on the clipboard.", icon: SF.doc, onClick: () => copyText(entry.address) },
-      { label: "Show QR Code", subtitle: "Full screen, for scanning with another device.", icon: SF.qrcode, onClick: () => coldReceive({ label: displayLabel(entry), address: entry.address, onBack: back }) },
-      ...(entry.balanceSompi === 0n ? [{
-        label: "Hide Address", subtitle: "Removes it from this list. Re-enable it in Address Visibility.", icon: SF.eyeSlash, tint: "orange",
-        onClick: () => hideAddress(entry),
-      }] : []),
+      { label: "Hide Address", subtitle: "Removes it from this list. Re-enable it in Address Visibility.", icon: SF.eyeSlash, tint: "orange", onClick: () => hideAddress(entry) },
       // A wrong number (or a change address given as a receive one) makes the unit refuse the
       // request: it can be put right, or cleared to let the unit search. A quantum address added by
       // mistake goes from the account; its coins stay on chain (K iOS 961fc05a).
-      ...(entry.quantum ? [
-        { label: "Edit Address Number", subtitle: "The number and chain KasSigner shows for this address.", icon: SF.number, onClick: () => editNumber(entry) },
-        { label: "Stop Watching", subtitle: "Removes this quantum address from the account. Scan it again to add it back.", icon: SF.minusCircle, danger: true, onClick: () => stopWatching(entry) },
-      ] : []),
+      { label: "Edit Address Number", subtitle: "The number and chain KasSigner shows for this address.", icon: SF.number, onClick: () => editNumber(entry) },
+      { label: "Stop Watching", subtitle: "Removes this quantum address from the account. Scan it again to add it back.", icon: SF.minusCircle, danger: true, onClick: () => stopWatching(entry) },
     ],
   });
 
@@ -881,9 +1111,10 @@ function showAccount({ accountId, onBack }) {
     },
   });
 
-  // Edit Address Number: the stored record, by address (the row may be from before an earlier edit)
-  const editNumber = (entry) => {
-    const record = state.account.quantumAddresses.find((q) => q.address === String(entry.address).toLowerCase());
+  // Edit Address Number: the stored record, by address (the card may be from before an earlier edit)
+  const editNumber = async (entry) => {
+    const latest = await getAccount(accountId);
+    const record = latest?.quantumAddresses.find((q) => q.address === String(entry.address).toLowerCase());
     if (!record) return;
     quantumSheet({
       adding: false,
@@ -908,7 +1139,7 @@ function showAccount({ accountId, onBack }) {
     const go = async () => {
       await removeQuantumAddress(accountId, entry.address);
       state.entries = (state.entries || []).filter((e) => e.address !== entry.address);
-      paint();
+      repaintIfHere();
       load();
     };
     if (!(entry.balanceSompi > 0n)) { go(); return; }
@@ -922,77 +1153,64 @@ function showAccount({ accountId, onBack }) {
     document.querySelector(".alert-button.strong")?.classList.add("cold-destructive");
   };
 
-  const renameAddress = (entry) => showAlert({
-    title: "Rename Address",
-    field: { placeholder: "Label", value: entry.label || "" },
-    confirmLabel: "Save",
-    cancelLabel: "Cancel",
-    onConfirm: async (value) => {
+  // In place, no pop-up (K iOS b49a021d InlineRename; K-Desktop 9024bfe, c8e775a): the card's name
+  // becomes a field starting from the address's own label (empty when it has none), saved once when
+  // it ends; empty goes back to "Address #n" (a quantum one's own name).
+  const renameAddress = (entry) => startInlineRename(app.querySelector(`.managed-card[data-open="${entry.index}"]`), {
+    key: `cold:${accountId}:${entry.address}`,
+    current: entry.label || "",
+    placeholder: entry.defaultLabel || `Address #${entry.index}`,
+    onChange: async (value) => {
       const clean = String(value || "").trim();
-      await updateAccount(accountId, (a) => {
-        // a quantum row files under its index now (K-Desktop currentIndexOf)
-        const at = currentIndexOf(a, entry);
-        if (at == null) return;
-        if (clean) a.labels[at] = clean; else delete a.labels[at];
-      });
+      entry.label = clean || null;
+      try {
+        await updateAccount(accountId, (a) => {
+          // a quantum card files under its index now (K-Desktop currentIndexOf)
+          const at = currentIndexOf(a, entry);
+          if (at == null) return;
+          if (clean) a.labels[at] = clean; else delete a.labels[at];
+        });
+      } catch (error) { toast(error.message); }
       load();
     },
+    onDone: () => paint(),
   });
 
+  // A regular card's top right, a quantum card's ⋮, or a swipe (K iOS b49a021d hideAddress): an
+  // address holding Kaspa stays on the list, and the live balance has the last word (setHidden
+  // fails closed). Filed under its index in the account as it is now (K-Desktop 0222137).
   const hideAddress = async (entry) => {
-    const at = currentIndexOf(state.account, entry);
-    const ok = at != null && await setHidden(state.account, at, true);
-    if (!ok) { toast("This address can't be hidden."); return; }
+    if (entry.balanceSompi > 0n) { toast("An address holding Kaspa stays on the list."); repaintIfHere(); return; }
+    const account = await getAccount(accountId);
+    const at = account ? currentIndexOf(account, entry) : null;
+    const ok = at != null && await setHidden(account, at, true);
+    if (!ok) { toast("This address can't be hidden."); repaintIfHere(); return; }
     entry.hidden = true;
-    paint();
+    repaintIfHere();
     toast("Address hidden. Re-enable it in Address Visibility.");
     load();
   };
 
-  const actionRows = () => {
-    const discovering = Boolean(state.discovery);
-    return [
-      { label: "Generate More Addresses", subtitle: "Reveals the next unused address in this account.", icon: SF.plusCircle, busy: state.busy === "generate", disabled: discovering, onClick: generate },
-      // KasSigner never exports its quantum (22') kpub - it would show every key those addresses
-      // hide - so each is scanned from the unit, one at a time (K iOS 961fc05a)
-      { label: "Add Quantum-Resistant Address", subtitle: "Scan a KCC-3 address from KasSigner's address screen.", icon: SF.shield, disabled: discovering, onClick: addQuantum },
-      { label: "Discover Addresses", subtitle: "Finds addresses holding a balance or a username.", icon: SF.magnifier, disabled: discovering, keepOpen: true, onClick: discover },
-      { label: "Address Visibility", subtitle: "Check off every address you want on the list, in one sitting.", icon: SF.checklist, disabled: discovering, onClick: () => showVisibility({ accountId, onDone: back }) },
-      // the kpub is never on screen (K iOS b0f0a4e6): it reveals every address, so it is only copied
-      { label: "Copy kpub", subtitle: "Puts this account's kpub on the clipboard. It reveals all its addresses.", icon: SF.doc, disabled: discovering, onClick: () => copyKpub(state.account.kpub) },
-    ];
-  };
+  // --- the top right and the floating + -------------------------------------------------------
 
-  const discoveryHtml = () => {
-    const d = state.discovery;
-    if (!d) return state.summary ? `<p class="muted small strong sheet-summary center-text">${esc(state.summary)}</p>` : "";
-    return `
-      <div class="discovery">
-        <span class="spinner"></span>
-        <div class="strong">Checking address #${d.checkingIndex}</div>
-        <div class="muted small">${d.foundCount ? `${d.foundCount} found so far` : "No used addresses yet"}</div>
-        <div class="muted tiny">Checks the first thousand addresses whatever the gaps, then keeps going while it keeps finding.</div>
-        <button class="sheet-row center-text cold-keep-scanning" id="keep-scanning"><span class="sheet-label accent">Close and Keep Scanning</span></button>
-      </div>`;
-  };
-
-  const openActions = () => {
-    state.summary = "";
-    actionsSheet = showSheet({ title: "Address Actions", cancel: false, rows: state.discovery ? [] : actionRows(), footerHtml: discoveryHtml() });
-    bindKeepScanning();
-  };
-  const refreshActions = () => {
-    if (!actionsSheet?.isOpen()) return;
-    actionsSheet.update({ rows: state.discovery ? [] : actionRows(), footerHtml: discoveryHtml() });
-    bindKeepScanning();
-  };
-  const bindKeepScanning = () => {
-    const keep = document.querySelector("#keep-scanning");
-    if (keep) keep.onclick = () => actionsSheet.close();
+  // The floating + (K iOS b49a021d newAddressSheet, K-Desktop openNewAddressChooser): the next
+  // unused address of the kpub, or a quantum-protected one scanned from the unit. KasSigner never
+  // exports its quantum (22') kpub - it would show every key those addresses hide - so each is
+  // scanned, one at a time (K iOS 961fc05a).
+  const openNewAddress = () => {
+    if (state.busy || state.discovery) return;
+    showSheet({
+      title: "New Address",
+      cancel: false,
+      rows: [
+        { label: "Regular Address", subtitle: "Reveals the next unused address in this account.", icon: SF.plusCircle, onClick: generate },
+        { label: "Quantum-Protected Address", subtitle: "Scan a KCC-3 address from KasSigner's address screen.", icon: SF.shield, onClick: addQuantum },
+      ],
+    });
   };
 
   async function generate() {
-    if (state.busy) return;
+    if (state.busy || state.discovery) return;
     state.busy = "generate";
     repaintIfHere();
     try {
@@ -1006,65 +1224,69 @@ function showAccount({ accountId, onBack }) {
     repaintIfHere();
   }
 
+  // While Discover Addresses runs: how far it is, under the Total Balance (K iOS b49a021d
+  // discoveryStatus, K-Desktop discoverStatusInnerHtml); the result as a toast.
+  const discoveryInnerHtml = () => {
+    const d = state.discovery || { checkingIndex: 0, foundCount: 0 };
+    return `<span class="spinner small-spin"></span>
+      <span class="strong">Checking address #${d.checkingIndex}</span>
+      <span class="muted small cold-discovery-found">${d.foundCount ? `${d.foundCount} found so far` : "No addresses with a balance or username yet"}</span>`;
+  };
+
   async function discover() {
-    if (state.discovery) return;
+    if (state.discovery || state.busy) return;
     state.discovery = { checkingIndex: 0, foundCount: 0 };
-    state.summary = "";
-    refreshActions();
     repaintIfHere();
     let message;
     try {
-      const found = await discoverAddresses(accountId, (progress) => { state.discovery = progress; refreshActions(); });
+      const found = await discoverAddresses(accountId, (progress) => {
+        state.discovery = progress;
+        const status = here() ? app.querySelector("#cold-discovery") : null;
+        if (status) status.innerHTML = discoveryInnerHtml();
+      });
       message = !found ? "No addresses with a balance or username found." : found === 1 ? "Found 1 address with a balance or username." : `Found ${found} addresses with a balance or username.`;
     } catch (error) {
       message = error.message;
     }
     await load();
     state.discovery = null;
-    // Sheet still open: the result shows in it. Closed: it arrives as a toast.
-    if (actionsSheet?.isOpen()) { state.summary = message; refreshActions(); } else toast(message);
+    toast(message);
     repaintIfHere();
   }
 
-  const renameAccount = () => fieldSheet({
-    title: "Rename Account",
-    subtitle: state.account.label,
-    placeholder: "Name",
-    value: state.account.label,
-    confirmLabel: "Save",
-    onConfirm: async (name) => {
-      const account = await updateAccount(accountId, (a) => { a.label = name; });
-      if (account) state.account = account;
-      repaintIfHere();
-    },
-  });
-
-  const removeAccount = () => {
-    showAlert({
-      title: "Remove Cold Storage Account",
-      message: "This only removes it from K's watch list. It has no effect on the KasSigner device or any funds it holds.",
-      confirmLabel: "Remove",
-      cancelLabel: "Cancel",
-      onConfirm: async () => {
-        const accounts = await loadAccounts();
-        await saveAccounts(accounts.filter((a) => a.id !== accountId), store.key);
-        // its coin labels go with it, unless another list still watches that KasSigner key (KaPay
-        // iOS 5848fb0)
-        const removed = accounts.filter((a) => a.id === accountId);
-        await wallet.coldUtxoLabelKeys(removed).then((keys) => keys.length && removeLocal(keys)).catch(() => {});
-        // a quantum address's coin labels go with the last account watching it (K iOS 961fc05a)
-        const kept = new Set(accounts.filter((a) => a.id !== accountId).flatMap((a) => a.quantumAddresses.map((q) => q.address)));
-        const orphaned = removed.flatMap((a) => a.quantumAddresses.map((q) => q.address)).filter((q) => !kept.has(q));
-        if (orphaned.length) await removeLocal(wallet.utxoLabelKeysFor(orphaned)).catch(() => {});
-        onBack();
-      },
-    });
-    document.querySelector(".alert-button.strong")?.classList.add("cold-destructive");
-  };
-
   // --- paint ------------------------------------------------------------------------------------
 
+  const cardHtml = (entry) => {
+    const unread = entry.balanceSompi == null;
+    const card = managedAddressCardHtml({
+      attrs: `data-open="${entry.index}"`,
+      name: displayLabel(entry),
+      tagHtml: quantumTagHtml({ quantum: Boolean(entry.quantum), spent: state.spent.has(entry.address), funded: entry.balanceSompi > 0n }),
+      // a quantum card keeps the ⋮ (Hide, Edit Address Number, Stop Watching); a regular one's top
+      // right hides it at once (K iOS b49a021d: no Send to Chatting Address in Cold Storage)
+      menuAttr: entry.quantum ? `data-menu="${entry.index}"` : null,
+      cornerHtml: entry.quantum ? "" : `<button type="button" class="icon plain cold-card-corner" data-hide="${entry.index}" aria-label="Hide Address" title="Hide Address">${SF.eyeSlash}</button>`,
+      amountHtml: unread ? '<span class="muted small">Couldn\'t load the coins at this address</span>' : `${esc(groupedKas8(entry.balanceSompi))} KAS`,
+      worth: unread ? "" : fiatTextFor(entry.balanceSompi, repaintIfHere),
+      used: usedOf(entry),
+      extraHtml: domainOwners.get(entry.address) ? '<span class="domain-tag">Contains username</span>' : "",
+      buttons: [
+        { action: "copy", icon: "copy", title: "Copy" },
+        { action: "send", icon: "send", title: "Send", disabled: !(entry.balanceSompi > 0n) },
+        { action: "receive", icon: "receive", title: "Receive" },
+        { action: "rename", icon: "rename", title: "Rename" },
+      ],
+    });
+    return `
+      <div class="swipe-wrap" data-swipe="${entry.index}">
+        <button class="swipe-hide" tabindex="-1" aria-label="Hide Address">${EYE_SLASH_FILL}<span>Hide</span></button>
+        <div class="swipe-card">${card}</div>
+      </div>`;
+  };
+
   function paint() {
+    // a card's name is being typed: the rename's end repaints (inline-rename.js)
+    if (inlineRenameActive()) return;
     const account = state.account;
     if (!account) {
       render(`${navHeader({})}<div class="manage-scroll"><div class="center-text pad"><span class="spinner"></span></div></div>`, "cold:account");
@@ -1072,61 +1294,58 @@ function showAccount({ accountId, onBack }) {
       $("#back").onclick = onBack;
       return;
     }
-    const rows = visibleEntries();
-    const shown = (state.entries || []).filter((e) => !e.hidden);
-    // a balance that couldn't be read leaves no total to show (a dash, never a short one)
-    const unread = shown.some((e) => e.balanceSompi == null);
-    const total = unread ? null : shown.reduce((sum, e) => sum + e.balanceSompi, 0n);
+    const rows = shownEntries();
+    const all = state.entries || [];
+    // every address of the account, hidden ones too (K iOS d88891ea, K-Desktop 0222137); a balance
+    // that couldn't be read leaves no total to show (a dash, never a short one)
+    const unread = all.some((e) => e.balanceSompi == null);
+    const total = unread ? null : all.reduce((sum, e) => sum + e.balanceSompi, 0n);
     const busy = Boolean(state.discovery) || state.busy === "generate";
     const scroll = app.querySelector(".manage-scroll")?.scrollTop || 0;
     render(`
       <header class="navbar">
         <button class="nav-back" id="back" aria-label="Back">${ICONS.back}<span>Back</span></button>
         <div class="nav-title cold-nav-title">${esc(account.label)}</div>
-        <div class="nav-right"><button class="icon plain cold-trash" id="remove" aria-label="Remove Cold Storage Account">${SF.trash}</button></div>
+        <div class="nav-right bar-circles">
+          <button class="bar-circle" id="discover" aria-label="Discover Addresses" title="Discover Addresses" ${state.busy ? "disabled" : ""}>${state.discovery ? '<span class="spinner small-spin"></span>' : DISCOVER_ICON}</button>
+          <button class="bar-circle" id="visibility" aria-label="Address Visibility" title="Address Visibility" ${state.discovery ? "disabled" : ""}>${VISIBILITY_ICON}</button>
+        </div>
       </header>
       <div class="manage-scroll cold-detail">
-        <div class="cold-summary">
-          <div class="cold-summary-name">
-            <div class="tx-meta"><span class="muted cold-caption">Name</span><span class="strong cold-name">${esc(account.label)}</span></div>
-            <button class="icon plain accent cold-pencil" id="rename-account" aria-label="Rename Account">${SF.pencilSmall}</button>
-          </div>
-        </div>
-        ${balanceCardHtml({ label: "Total Balance", sompi: state.entries ? total : null, unknown: Boolean(state.entries) && Boolean(unread), fiatText: state.entries && !unread ? fiatTextFor(total, repaintIfHere) : "" })}
+        ${balanceCardHtml({ label: "Total Balance", sompi: state.entries ? total : null, unknown: Boolean(state.entries) && unread, fiatText: state.entries && !unread ? fiatTextFor(total, repaintIfHere) : "" })}
+        ${state.discovery ? `<div class="cold-discovery" id="cold-discovery" role="status">${discoveryInnerHtml()}</div>` : ""}
         ${state.loading && !state.entries ? '<div class="center-text cold-loading"><span class="spinner"></span></div>'
           : !rows.length ? '<p class="muted cold-none">No addresses discovered yet.</p>'
-          : rows.map((entry) => `
-            <div class="glass address-card cold-address" data-open="${entry.index}" role="button" tabindex="0">
-              <div class="address-card-main">
-                <span class="accent cold-row-label">${esc(displayLabel(entry))}${quantumShieldHtml({ quantum: entry.quantum, spent: state.spent.has(entry.address), balanceSompi: entry.balanceSompi ?? 0n })}</span>
-                <span class="mono cold-row-address">${esc(shortAddress(entry.address))}</span>
-                ${entry.balanceSompi == null
-                  ? '<span class="muted small cold-row-amount">Couldn\'t load the coins at this address</span>'
-                  : `<span class="strong cold-row-amount">${esc(groupedKas8(entry.balanceSompi))} KAS</span>`}
-                <span class="address-status">${usedBadge(entry)}${domainOwners.get(entry.address) ? '<span class="domain-tag">Contains username</span>' : ""}</span>
-              </div>
-              <button class="icon plain card-menu" data-menu="${entry.index}" aria-label="Address actions">${SF.ellipsisV}</button>
-            </div>`).join("")}
+          : rows.map(cardHtml).join("")}
         <div class="fab-room"></div>
       </div>
-      ${addressActionsFabHtml(busy)}`, "cold:account");
+      <button class="fab" id="new-address" aria-label="New Address" title="New Address" ${busy ? "disabled" : ""}>${busy ? '<span class="spinner small-spin"></span>' : PLUS_ICON}</button>`, "cold:account");
     app.dataset.coldAccount = accountId;
     dock.remember(() => paint());
     const scroller = app.querySelector(".manage-scroll");
     if (scroller) scroller.scrollTop = scroll;
     $("#back").onclick = onBack;
-    $("#remove").onclick = removeAccount;
-    $("#rename-account").onclick = renameAccount;
-    $("#address-actions").onclick = openActions;
-    const byIndex = (index) => state.entries.find((e) => e.index === Number(index));
-    for (const card of app.querySelectorAll("[data-open]")) {
-      card.onclick = (event) => {
-        if (event.target.closest("[data-menu]")) return;
-        showAddress({ accountId, entry: byIndex(card.dataset.open), account: state.account, entries: state.entries, onBack: back });
-      };
-      card.onkeydown = (event) => { if (event.key === "Enter") card.click(); };
+    $("#discover").onclick = discover;
+    $("#visibility").onclick = () => { if (!state.discovery) showVisibility({ accountId, onDone: back }); };
+    $("#new-address").onclick = openNewAddress;
+    const byIndex = (index) => (state.entries || []).find((e) => e.index === Number(index));
+    const swipes = new Map();
+    for (const wrap of app.querySelectorAll("[data-swipe]")) {
+      swipes.set(wrap.dataset.swipe, bindSwipeToHide(wrap, { onHide: () => hideAddress(byIndex(wrap.dataset.swipe)) }));
     }
-    for (const button of app.querySelectorAll("[data-menu]")) button.onclick = () => rowActions(byIndex(button.dataset.menu));
+    for (const card of app.querySelectorAll(".managed-card[data-open]")) {
+      card.onclick = (event) => {
+        if (swipes.get(card.dataset.open)?.wasSwiped()) return;
+        const entry = byIndex(card.dataset.open);
+        if (!entry) return;
+        if (event.target.closest("[data-menu]")) { quantumActions(entry); return; }
+        if (event.target.closest("[data-hide]")) { hideAddress(entry); return; }
+        const button = event.target.closest("[data-card-action]");
+        if (button) { if (!button.disabled) cardAction(entry, button.dataset.cardAction); return; }
+        showAddress({ accountId, entry, account: state.account, entries: state.entries, onBack: back });
+      };
+      card.onkeydown = (event) => { if (event.key === "Enter" && event.target === card) card.click(); };
+    }
   }
 
   paint();
@@ -1181,6 +1400,9 @@ function showVisibility({ accountId, onDone }) {
 
   const toggle = async (row) => {
     if (row.balanceSompi > 0n) return; // funded rows don't toggle
+    // the account as it is now (K-Desktop 0222137: every action looks it up again before it writes)
+    state.account = await getAccount(accountId);
+    if (!state.account) { onDone(); return; }
     // the kpub's chain only: the quantum entries sit far above it
     const derivedMax = state.entries.filter((e) => !e.quantum).reduce((max, e) => Math.max(max, e.index), -1);
     if (row.index > derivedMax) {
@@ -1209,6 +1431,8 @@ function showVisibility({ accountId, onDone }) {
   // pager (K iOS 961fc05a ColdStorageAddressVisibilityView). A hide files under the row's index now.
   const toggleQuantum = async (row) => {
     if (row.balanceSompi > 0n) return;
+    state.account = await getAccount(accountId);
+    if (!state.account) { onDone(); return; }
     const at = currentIndexOf(state.account, row);
     if (at == null) return;
     const ok = await setHidden(state.account, at, !row.hidden);
@@ -1314,23 +1538,9 @@ function showAddress({ accountId, entry, account = null, entries = null, onBack 
   };
   const reload = () => { loadHistory(); loadCoins(); };
 
-  // A quantum address's send: its record (its number and chain on the unit) and the account's other
-  // quantum addresses, read fresh, for the change (K iOS 961fc05a).
-  const openSend = async (compound) => {
-    let quantumInfo = null;
-    if (quantum) {
-      const latest = await getAccount(accountId);
-      const record = latest?.quantumAddresses.find((q) => q.address === address.toLowerCase());
-      if (!record) { toast("This address is no longer in this account."); return; }
-      quantumInfo = { record, records: latest.quantumAddresses, labelOf: (other) => quantumLabelIn(latest, other) };
-    }
-    showColdSendFor(compound, quantumInfo);
-  };
-  const showColdSendFor = (compound, quantumInfo) => showColdSend({
-    fromAddress: address,
-    availableSompi: balance(),
-    compound,
-    quantum: quantumInfo,
+  // Compound UTXOs (its Send is on the address's card: K iOS b49a021d, K-Desktop 9024bfe)
+  const openSend = (compound) => openColdSendFrom({
+    accountId, address, quantum, availableSompi: balance(), compound,
     onClose: () => { paint(); },
     onDone: () => { paint(); reload(); },
   });
@@ -1439,7 +1649,8 @@ function showAddress({ accountId, entry, account = null, entries = null, onBack 
 
   function paint() {
     const total = balance();
-    // its coins couldn't be read: no balance and no Send (KaPay iOS 0799cec)
+    // its coins couldn't be read: no balance (KaPay iOS 0799cec). The full address is on its card,
+    // and no Send / Receive bar: they're on the address's card (K iOS b49a021d, K-Desktop 9024bfe).
     const unreadable = total == null && Boolean(state.coinsError) && !state.coinsLoading;
     const scroll = app.querySelector(".manage-scroll")?.scrollTop || 0;
     render(`
@@ -1448,14 +1659,10 @@ function showAddress({ accountId, entry, account = null, entries = null, onBack 
         <div class="nav-title cold-nav-title">${esc(title)}</div>
         ${addressOptionsButtonHtml()}
       </header>
-      ${unreadable ? unreadableBalanceHtml("cold-address-balance") : balanceCardHtml({ label: title, sompi: total, fiatText: fiatTextFor(total, repaintIfHere) })}
+      ${unreadable ? unreadableBalanceHtml("cold-address-balance") : balanceCardHtml({ label: title, sompi: total, fiatText: fiatTextFor(total, repaintIfHere), address })}
       ${pageCycleHtml([["history", "History"], ["utxos", "UTXOs"], ["domains", "Usernames"]], state.tab, { className: "cold-tabs" })}
       <div class="manage-scroll cold-address-scroll">
         ${state.tab === "history" ? historyHtml() : state.tab === "utxos" ? utxosHtml() : kachatHtml()}
-      </div>
-      <div class="ios-bottom-bar">
-        <button class="ios-capsule with-icon" id="receive">${SF.qrcodeSmall}<span>Receive</span></button>
-        <button class="ios-capsule with-icon cold-bold" id="send" ${total == null || total === 0n ? "disabled" : ""}>${SF.sendFill}<span>Send</span></button>
       </div>`, "cold:address");
     if (state.tab === "domains") kachatTab?.bind(app, back);
     app.dataset.coldAddress = address;
@@ -1470,8 +1677,6 @@ function showAddress({ accountId, entry, account = null, entries = null, onBack 
       address,
       onViewPublicKey: quantum ? null : () => showPublicKey({ address, value: xOnlyKeyFromAddress(address), onBack: back }),
     });
-    $("#receive").onclick = () => coldReceive({ label: title, address, onBack: back });
-    $("#send").onclick = () => openSend(false);
     for (const row of app.querySelectorAll("[data-tx]")) {
       // the sheet's summary and Add to Portfolio use the row's own figure
       row.onclick = () => {

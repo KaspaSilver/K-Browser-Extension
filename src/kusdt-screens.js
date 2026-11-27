@@ -33,7 +33,7 @@ import {
 import { KusdtCoreError } from "../shared/engine/kusdt-core.js";
 import { KusdtBalanceError } from "../shared/engine/kusdt-balances.js";
 import { sendFeeChangedError, SEND_OUTCOME_UNKNOWN } from "../shared/engine/transactions.js";
-import { addressNumber } from "../shared/engine/quantum.js";
+import { addressNumber, spendingIndexTitle } from "../shared/engine/quantum.js";
 import {
   receiveNotesFor, kasAmountText, kusdtFeeText, isHoldingUsed, shortKusdtAddress, visibilityShortAddress,
   KUSDT_VISIBILITY_PAGE, makeHolding,
@@ -51,6 +51,7 @@ import { recipientCardHtml, recipientStatusHtml, recipientLookup, bindAddressBoo
 import { scanQr } from "./camera.js";
 import { entryFor, entryName } from "./address-book.js";
 import { managedAddressCardHtml } from "./manage.js";
+import { startInlineRename, inlineRenameActive } from "./inline-rename.js";
 import "./kusdt.css";
 
 const SYMBOL = KUSDT_TOKEN.symbol;
@@ -806,6 +807,8 @@ export function openManageKusdt({ onBack }) {
   };
 
   const paint = () => {
+    // a card's name is being typed: the rename's end repaints (inline-rename.js)
+    if (inlineRenameActive()) return;
     const units = w.balance();
     const rows = w.listed();
     const hidden = w.hiddenCount();
@@ -897,17 +900,18 @@ export function openManageKusdt({ onBack }) {
     });
   };
 
-  const rename = (h) => showAlert({
-    title: "Rename Address",
-    message: "Give this address a label to help you recognize it.",
-    field: { placeholder: "Label", value: kusdtCustomLabel(h.spendingIndex) },
-    confirmLabel: "Save",
-    cancelLabel: "Cancel",
-    onConfirm: async (value) => {
+  // In place (K iOS b49a021d, K-Desktop 6b42f14): saved under the address's Kaspa name, which
+  // Manage Addresses shows too, when it ends; empty goes back to "Address #n".
+  const rename = (h) => startInlineRename([...app.querySelectorAll("[data-open]")].find((el) => el.dataset.open === String(h.id)), {
+    key: `kusdt:${h.id}`,
+    current: kusdtCustomLabel(h.spendingIndex),
+    placeholder: spendingIndexTitle(h.spendingIndex),
+    onChange: async (value) => {
       try { await wallet.setSpendingLabel(h.spendingIndex, String(value || "").trim()); } catch (error) { toast(error.message); }
       try { await syncKusdtAccount(); } catch { /* the label shows on the next sync */ }
       if (app.dataset.screen === "kusdt-manage") paint();
     },
+    onDone: () => { if (app.dataset.screen === "kusdt-manage") paint(); },
   });
 
   // Discover kUSDT Addresses: closing its sheet doesn't stop it.

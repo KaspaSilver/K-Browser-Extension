@@ -133,6 +133,9 @@ ext?.storage?.onChanged?.addListener((changes, area) => {
 // Bumped whenever this window leaves the account it showed: a screen still loading for that
 // account draws nothing.
 let accountEpoch = 0;
+/** Your names in grace, for the account shown (K b49a021d): Wallet's red dot stays until they're
+ *  renewed or lapse, whatever the bell holds; only the banner can be closed. */
+const expiredNames = { main: null, count: 0 };
 
 /**
  * Everything this window had open for the account it showed goes - lock, log out, delete, or a
@@ -152,6 +155,7 @@ async function leaveAccount() {
   closeDialogs();
   dock.enableDock(false);
   dock.resetStatus();
+  noteExpiredNames(null, 0);
   bell.useAccount(null);
   addressBook.useWallet(null);
   forgetKachatSigner();
@@ -209,6 +213,8 @@ async function showHome() {
   if (loggedOut) { dock.enableDock(false); return showWelcome(); }
   // The bell keeps a feed per account (its chatting address) and network.
   bell.useAccount(cached?.main || null);
+  // another account's expired names aren't this one's
+  if (expiredNames.main !== (cached?.main || null)) noteExpiredNames(null, 0);
   // One list of contacts per wallet (iOS 00767a4).
   addressBook.useWallet(cached?.main || null);
   homeState = {
@@ -311,7 +317,9 @@ function paintHome() {
   if (!s) return;
   const main = s.addresses?.main || null;
   // The account's .kachat names (iOS 10e4a1a - 0 where the registry isn't launched).
-  const domainCount = s.kachatCount || 0;
+  // a name of yours in grace: "1 Expired" in red beside the count, until it's renewed (K b49a021d)
+  const expiredCount = (s.graceNames || []).length;
+  const domainCount = Math.max(s.kachatCount || 0, expiredCount);
   // Both parts or a dash: a total missing one of them would read as the whole balance (iOS
   // HotWalletBalance). The total counts hidden addresses too, Cold Storage not.
   const totalSompi = s.balances?.total ?? null;
@@ -380,7 +388,7 @@ function paintHome() {
         </button>
         <button class="glass nav-row" id="domains">
           <span class="nav-row-label">${ICONS.at}<span>Your Usernames</span></span>
-          <span class="nav-row-value">${domainCount ? esc(String(domainCount)) : ""}</span>${ICONS.chevron}
+          <span class="nav-row-value">${expiredCount ? `<span class="nav-row-expired">${ICONS.warning}${esc(`${expiredCount} Expired`)}</span>` : ""}${domainCount ? esc(String(domainCount)) : ""}</span>${ICONS.chevron}
         </button>
         <button class="glass nav-row" id="swap-history">
           <span class="nav-row-label">${ACTION.history}<span>Buy/Sell History</span></span>${ICONS.chevron}
@@ -563,10 +571,20 @@ async function openChattingQr(s, onBack) {
 
 // --- The bell (iOS GlobalNotificationListView): received Kaspa and .kachat news -------------
 
+function noteExpiredNames(main, count) {
+  expiredNames.main = main;
+  expiredNames.count = count;
+  syncWalletDot();
+}
+/** The Wallet tab's red dot, from any tab: the bell has something unread (iOS 28d9d68) or a name of
+ *  yours expired (K b49a021d). */
+function syncWalletDot() {
+  dock.setBadge("profile", bell.unreadCount() > 0 || expiredNames.count > 0);
+}
+
 /** Repaints just the bell's dot when the feed changes. */
 bell.onBellChange(() => {
-  // the Wallet tab's red dot follows the bell from any tab (iOS 28d9d68)
-  dock.setBadge("profile", bell.unreadCount() > 0);
+  syncWalletDot();
   const button = app.querySelector("#bell");
   if (!button) return;
   button.outerHTML = bell.bellButtonHtml();
@@ -661,10 +679,20 @@ async function refreshHome() {
             const countHeld = async () => {
               const held = await rt.registry.heldNames(key).catch(() => null);
               if (!held || s.addresses?.main !== main) return;
-              // the ones expired and in grace: the Profile banner (iOS 6ac48a7)
+              // the ones expired and in grace: the banner, Wallet's red dot and Your Usernames'
+              // "1 Expired" (iOS 6ac48a7, K b49a021d) - on every address of this wallet, not only
+              // the chatting one (K d88891ea: a name Buy From claimed on a spending address)
               const graceMs = rt.registry.graceMs;
-              const grace = held.filter((n) => n.status(graceMs) === "grace").map((n) => ({ info: n, endsAt: Number(n.expiresAt + graceMs) }));
+              let every = held;
+              if (String(rt.actions?.myAddress || "").toLowerCase() === main.toLowerCase()) {
+                every = (await rt.actions.ownNamesAndOffers({ heldOnly: true }).catch(() => null))?.names || held;
+                if (s.addresses?.main !== main) return;
+              }
+              const grace = every.filter((n) => n.status(graceMs) === "grace")
+                .sort((a, b) => (a.expiresAt < b.expiresAt ? -1 : a.expiresAt > b.expiresAt ? 1 : 0))
+                .map((n) => ({ info: n, endsAt: Number(n.expiresAt + graceMs) }));
               const graceKey = grace.map((g) => `${g.info.name}:${g.info.expiresAt}`).join(",");
+              noteExpiredNames(main, grace.length);
               if (s.graceKey !== graceKey) { s.graceKey = graceKey; s.graceNames = grace; paintHomeIfShowing(s); }
               if (s.kachatCount !== held.length) { s.kachatCount = held.length; paintHomeIfShowing(s); }
               // a name that lapses while the wallet is open comes off the count right then

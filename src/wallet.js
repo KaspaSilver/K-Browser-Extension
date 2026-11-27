@@ -1492,25 +1492,49 @@ async function claimNextRegularSlot(account) {
 // ChangeNOW Swap's payout (KaChat-Desktop Build 217, iOS 28ecee0): the next LEGACY slot, never a
 // quantum-safe one - one past the legacy chain.
 /** The next legacy slot, shown before the swap is real (not reserved). -> { index, address } */
-export async function nextSwapPayoutAddress() {
+export async function nextSwapPayoutAddress({ skip = [] } = {}) {
   const { account, state } = await activeState();
-  const index = state.maxIndex + 1;
+  // The next regular slot that has really never been used (K-Desktop 76d4a7f, audit 2026-11-27):
+  // past every revealed one, skipping those holding kUSDT (`skip`, Manage kUSDT's indices), and
+  // checked on chain, since after a restore Discover only reveals addresses that still hold
+  // something. A slot the network can't answer for is taken as fresh.
+  let index = freshRegularSlot(state.maxIndex, skip);
+  for (let tries = 0; tries < 20; tries += 1) {
+    const address = (await spendingAddressRange(index, 1, account))[index];
+    if (!address) return null;
+    if ((await addressUsed(address)) !== true) return { index, address };
+    index = freshRegularSlot(index, skip);
+  }
   return { index, address: (await spendingAddressRange(index, 1, account))[index] };
 }
 export const PAYOUT_CHANGED = "PAYOUT_CHANGED";
 
-/** Reserves the next legacy slot for a swap that was just created. -> { index, address }.
- *  `shownAddress`: the payout the swap screen showed; when the next slot is another address now
- *  (another window took that one, or switched accounts) nothing is reserved and PAYOUT_CHANGED is
- *  thrown with the new one as `next` (audit 2026-11-13). */
-export async function reserveSwapPayoutAddress(shownAddress = null) {
+/** The regular slot after `after`, skipping `skip` (K-Desktop freshRegularIndex). */
+function freshRegularSlot(after, skip = []) {
+  const taken = new Set([...skip].map(Number));
+  let index = Math.max(-1, Number(after)) + 1;
+  while (taken.has(index)) index += 1;
+  return index;
+}
+
+/** Reserves the legacy slot a swap (or a debit-card buy) was just made for. -> { index, address }.
+ *  `shown`: the payout the screen showed, `{ index, address }` from nextSwapPayoutAddress (or just
+ *  an address: the next slot). When it isn't free any more (another window took that slot, or
+ *  switched accounts) nothing is reserved and PAYOUT_CHANGED is thrown with the new one as `next`
+ *  (audit 2026-11-13). The slots it skipped over hold kUSDT or were used: they're shown, not hidden. */
+export async function reserveSwapPayoutAddress(shown = null, { skip = [] } = {}) {
   const { account, state } = await editableState();
-  const index = state.maxIndex + 1;
-  const address = (await spendingAddressRange(index, 1, account))[index];
-  if (shownAddress && shownAddress !== address) {
+  const picked = shown && typeof shown === "object" ? shown : null;
+  const index = picked && Number.isInteger(picked.index) && !isQuantumIndex(picked.index) && picked.index > state.maxIndex
+    ? picked.index
+    : picked ? null : state.maxIndex + 1;
+  const address = index == null ? null : (await spendingAddressRange(index, 1, account))[index];
+  const shownAddress = picked ? picked.address : shown;
+  if (index == null || !address || (shownAddress && shownAddress !== address)) {
+    const nextIndex = freshRegularSlot(state.maxIndex, skip);
     const error = new Error("The receiving address changed in another K window. Check the new one and try again.");
     error.code = PAYOUT_CHANGED;
-    error.next = { index, address };
+    error.next = { index: nextIndex, address: (await spendingAddressRange(nextIndex, 1, account))[nextIndex] };
     throw error;
   }
   await saveSpendingState(account.id, { maxIndex: index });

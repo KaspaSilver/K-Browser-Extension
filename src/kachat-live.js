@@ -278,7 +278,8 @@ const errorText = (error) => String(heldCoinsError(error)?.message || error || "
 function statusPill(status) {
   // past grace a name is free to claim: "Available" (iOS eea52b2)
   const title = status === Status.active ? "Active" : status === Status.grace ? "Expired" : "Available";
-  return `<span class="kl-pill kl-${status}">${title}</span>`;
+  // in grace: red, so it isn't missed (K b49a021d; was orange)
+  return `<span class="kl-pill kl-${status}${status === Status.grace ? " kl-pill-expired" : ""}">${title}</span>`;
 }
 
 export const testnetBadge = () => '<span class="kl-testnet">Testnet</span>';
@@ -996,7 +997,7 @@ function ownTileHtml(n) {
   return `
     <button class="km-card kl-tile" data-name="${esc(n.name)}" aria-label="${esc(n.display)}">
       ${nameTileHtml(esc(n.name), `
-        ${badge ? `<span class="kl-tile-soon">${esc(badge)}</span>` : ""}
+        ${ownBadgeHtml(badge, "kl-tile-soon")}
         <span class="muted tiny kl-tile-expiry">${esc(ownNameExpiryLine(n))}</span>`)}
     </button>`;
 }
@@ -1006,7 +1007,16 @@ function ownTileHtml(n) {
 function ownNameBadge(n) {
   const status = statusOf(n);
   if (status === Status.active) return n.isListed ? "Listed" : null;
-  return status === Status.grace ? "Expired" : "Available";
+  // red, so it isn't missed (K b49a021d, owner 2026-11-27): it says what to do, not only what happened
+  return status === Status.grace ? EXPIRED_BADGE : "Available";
+}
+const EXPIRED_BADGE = "Expired: Renew Before Grace Ends";
+const WARNING_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20L12 3z"/><path class="kl-warning-mark" d="M12 9.5v4.5M12 16.8v.2"/></svg>';
+/** A card's badge, white on red with a warning sign while the name is in grace (K b49a021d). */
+function ownBadgeHtml(badge, className) {
+  if (!badge) return "";
+  const warning = badge === EXPIRED_BADGE;
+  return `<span class="${className}${warning ? " kl-badge-warning" : ""}">${warning ? WARNING_ICON : ""}${esc(badge)}</span>`;
 }
 
 /** When your name runs out (iOS 72b7dc7 expiryLine): "Expires <date>" - with the time once less
@@ -2936,7 +2946,7 @@ export function liveDomainsTab({ address, repaint, forAddress = false }) {
           </div>`)
       : entry.names.map((n) => `
           <button class="domain-button" data-kachat-name="${esc(n.name)}" aria-label="${esc(n.display)}">
-            <div class="domain-card"><span class="domain-name">${esc(n.display)}</span>${badge(n) ? `<span class="domain-badge">${esc(badge(n))}</span>` : ""}<span class="domain-foot">${esc(cardFootnote(n))}</span></div>
+            <div class="domain-card"><span class="domain-name">${esc(n.display)}</span>${ownBadgeHtml(badge(n), "domain-badge")}<span class="domain-foot">${esc(cardFootnote(n))}</span></div>
           </button>`).join("");
   const offers = !forAddress && !upgrading && entry.offers.length ? `
     <div class="kl-domains-offers">

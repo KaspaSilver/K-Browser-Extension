@@ -8,15 +8,15 @@
 // things stand. Offers you withdrew or refunded yourself (actions.selfClosedOffers) aren't news.
 // Testnet only until names launch on mainnet (`kachatNames()` is null there).
 //
-// A name held by one of the wallet's spending addresses gets no indexer pushes (they reach only
-// the chatting address), and the extension has no notifications permission (owner, 2026-10-16:
-// bell only), so its reminders are bell rows: renewal open and expired as for every name, and
-// also "a day before grace ends" - iOS's local last-call reminder (XP-024, reminders.js times).
+// The indexer's pushes reach only the chatting address and stop at expiry, and the extension has
+// no notifications permission (owner, 2026-10-16: bell only), so its reminders are bell rows, for
+// every name of the wallet (K iOS b49a021d, owner 2026-11-27: "make sure no one misses it"):
+// renewal open, expired, a week before grace ends (where grace is over two weeks) and a day before
+// - iOS's local reminders (XP-024, reminders.js times).
 
 import { kachatNames } from "./kachat-names.js";
 import { KAS_UNIT } from "./net.js";
 import { Status } from "../shared/engine/kachat-names/registry-state.js";
-import { bytesEqual } from "../shared/engine/kachat-names/codec.js";
 import { dayString } from "../shared/engine/kachat-names/actions.js";
 import { amount } from "./kachat-live.js";
 import { record } from "./bell.js";
@@ -25,6 +25,8 @@ import { logWarn } from "./log.js";
 const SNAPSHOT_PREFIX = "kachat-names-notifier-v1:";
 /** A check runs at most this often (refreshes and opening the wallet both ask). */
 const MIN_INTERVAL_MS = 20_000;
+const DAY_MS = 86_400_000n;
+const WEEK_MS = 7n * DAY_MS;
 
 let checking = false;
 let lastCheckAt = 0;
@@ -110,7 +112,7 @@ export async function checkKachatNamesNews() {
       const prev = old?.names?.[n.name];
       const s = prev && prev.expiresAt === expiresAt
         ? { ...prev }
-        : { expiresAt, renewNoted: false, graceNoted: false, lastCallNoted: false, lapsedNoted: false };
+        : { expiresAt, renewNoted: false, graceNoted: false, weekNoted: false, lastCallNoted: false, lapsedNoted: false };
       switch (n.status(graceMs, now)) {
         case Status.active:
           if (!s.renewNoted && n.renewOpen(params, now)) {
@@ -119,25 +121,30 @@ export async function checkKachatNamesNews() {
             s.renewNoted = true;
           }
           break;
-        case Status.grace:
+        case Status.grace: {
           s.renewNoted = true;
-          // a day before grace ends (at most half the grace in), for a name on a spending address
-          if (!s.lastCallNoted && !bytesEqual(n.owner, me)) {
-            const grace = BigInt(graceMs);
-            const lastCallBefore = grace / 2n < 86_400_000n ? grace / 2n : 86_400_000n;
-            if (now >= BigInt(n.expiresAt) + grace - lastCallBefore) {
-              post(`lastcall-${n.name}-${expiresAt}`, n.name, `${display} has expired`,
-                `Renew it before ${dayString(Number(n.expiresAt) + Number(graceMs))} or anyone can claim it.`);
-              s.lastCallNoted = true;
-              s.graceNoted = true; // the last call says it; no second "expired" row
-            }
+          const grace = BigInt(graceMs);
+          const graceEndsAt = BigInt(n.expiresAt) + grace;
+          const renewBy = `Renew it before ${dayString(Number(graceEndsAt))} or anyone can claim it.`;
+          // a day before grace ends (at most half the grace in), then a week before where grace is
+          // over two weeks long (K b49a021d); either says it expired, so no second "expired" row
+          const lastCallBefore = grace / 2n < DAY_MS ? grace / 2n : DAY_MS;
+          if (!s.lastCallNoted && now >= graceEndsAt - lastCallBefore) {
+            post(`lastcall-${n.name}-${expiresAt}`, n.name, `${display} has expired`, renewBy);
+            s.lastCallNoted = true;
+            s.weekNoted = true;
+            s.graceNoted = true;
+          } else if (!s.weekNoted && grace > 2n * WEEK_MS && now >= graceEndsAt - WEEK_MS) {
+            post(`graceweek-${n.name}-${expiresAt}`, n.name, `${display} has expired`, renewBy);
+            s.weekNoted = true;
+            s.graceNoted = true;
           }
           if (!s.graceNoted) {
-            post(`grace-${n.name}-${expiresAt}`, n.name, `${display} has expired`,
-              `Renew it before ${dayString(Number(n.expiresAt) + Number(graceMs))} or anyone can claim it.`);
+            post(`grace-${n.name}-${expiresAt}`, n.name, `${display} has expired`, renewBy);
             s.graceNoted = true;
           }
           break;
+        }
         default:
           s.renewNoted = true;
           s.graceNoted = true;

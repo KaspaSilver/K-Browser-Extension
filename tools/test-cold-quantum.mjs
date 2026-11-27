@@ -559,8 +559,8 @@ function screens() {
   const state = readFileSync(join(repo, "src", "cold-quantum-state.js"), "utf8");
   const camera = readFileSync(join(repo, "src", "camera.js"), "utf8");
   r.check(/quantumAddresses: normalizeQuantumRecords\(raw\.quantumAddresses\)/.test(cold), "screens: an account keeps its quantum addresses");
-  r.check(/label: "Add Quantum-Resistant Address", subtitle: "Scan a KCC-3 address from KasSigner's address screen\."/.test(cold), "screens: Address Actions > Add Quantum-Resistant Address");
-  r.check(/entry\.quantum \? \[[\s\S]*Edit Address Number[\s\S]*Stop Watching/.test(cold), "screens: a quantum row's ⋯ has Edit Address Number and Stop Watching");
+  r.check(/label: "Quantum-Protected Address", subtitle: "Scan a KCC-3 address from KasSigner's address screen\.", icon: SF\.shield, onClick: addQuantum/.test(cold), "screens: the floating + > Quantum-Protected Address (K iOS b49a021d)");
+  r.check(/menuAttr: entry\.quantum \? `data-menu=/.test(cold) && /const quantumActions = \(entry\) => showSheet\(\{[\s\S]*Hide Address[\s\S]*Edit Address Number[\s\S]*Stop Watching/.test(cold), "screens: a quantum card's ⋮ has Hide, Edit Address Number and Stop Watching");
   r.check(/balanceSompi > 0n\)\) \{ go\(\); return; \}[\s\S]*Stop Watching This Address\?/.test(cold), "screens: Stop Watching asks first when the address holds coins");
   r.check((cold.match(/currentIndexOf\(/g) || []).length >= 4, "screens: rename and hide file under the row's current index");
   r.check(/Receive Address[\s\S]*Change Address[\s\S]*Number \(optional\)/.test(cold) && /parseUnitNumber\(form\.number\)/.test(cold), "screens: the number (optional, checked) and the Receive / Change chain");
@@ -569,7 +569,7 @@ function screens() {
   r.check(/if \(entry\.quantum \|\| !entry\.hidden/.test(cold), "screens: Generate More stays on the kpub's chain");
   r.check(/COLD_QUANTUM_INDEX_BASE \+ position;\n\s+if \(!hidden\.has\(index\)\) out\.push/.test(cold), "screens: quantum addresses are watched for Received KAS and names");
   r.check(/const addresses = \[\.\.\.derived, \.\.\.quantum\]/.test(cold) && /coldQuantumSpentState/.test(cold), "screens: quantum balances load with the rest, and the shield's spent state behind them");
-  r.check(/quantumShieldHtml\(\{ quantum: entry\.quantum, spent: state\.spent\.has/.test(cold), "screens: the shield on a quantum row");
+  r.check(/quantumTagHtml\(\{ quantum: Boolean\(entry\.quantum\), spent: state\.spent\.has\(entry\.address\), funded: entry\.balanceSompi > 0n \}\)/.test(cold), "screens: the quantum tag on a quantum card (K iOS b49a021d)");
   r.check(/onViewPublicKey: quantum \? null/.test(cold), "screens: no View Public Key on a quantum address (a script hash)");
   r.check(/utxoLabelKeysFor\(orphaned\)/.test(cold) && /utxoLabelKeysFor\(\[lowered\]\)/.test(cold), "screens: a quantum address's coin labels go with the last account watching it");
   r.check(/releaseQuantumChange\(s\.reservedChange\);[\s\S]*freshQuantumChange\(quantum\.records, from\)[\s\S]*changeAddress,[\s\S]*quantumUnitIndex:/.test(send), "screens: a quantum send's change is picked fresh (the old pick handed back) and the number sent");

@@ -41,8 +41,9 @@ check("Debit Card: where the kUSDT lands, a regular slot reserved, copied, then 
   assert.match(buy, /label: "Fresh Address"/);
   assert.match(buy, /label: "Chatting Address"/);
   // the fresh one is a swap payout's slot: the next LEGACY address, never a quantum one
-  assert.match(buy, /const fresh = await wallet\.nextSwapPayoutAddress\(\)/);
-  assert.match(buy, /address = \(await wallet\.reserveSwapPayoutAddress\(fresh\.address\)\)\.address;/);
+  // and never one holding kUSDT (K-Desktop 76d4a7f); the slot shown is the one reserved
+  assert.match(buy, /const fresh = await wallet\.nextSwapPayoutAddress\(\{ skip: kusdtListedIndices\(\) \}\)/);
+  assert.match(buy, /address = \(await wallet\.reserveSwapPayoutAddress\(fresh, \{ skip: kusdtListedIndices\(\) \}\)\)\.address;/);
   assert.match(buy, /if \(\(await vault\.readAccounts\(\)\)\.activeAccountId !== accountId\) return;/, "an account switch meanwhile does nothing");
   const copy = buy.indexOf("navigator.clipboard.writeText(address)");
   const open = buy.indexOf("ext.tabs.create({ url: trestlyBuyUrl() })");
@@ -84,7 +85,8 @@ check("a ChangeNOW order goes on to its deposit screen, checked every 10 s, then
   assert.match(swaps, /swap\?\.toTicker === "kas" \? "Purchase Complete" : "Sale Complete"/);
   assert.match(swaps, /swap\.addedToPortfolio \? "Added to Portfolio" : "Add to Portfolio"/);
   // Send KAS from K: Send Kaspa filled in, then back on this order's deposit screen
-  assert.match(swaps, /recipient: swap\.payinAddress, amountSompi,\n\s+onClose: \(\) => \{ dock\.returnToTab\(\); showSwap\(\{ deposit: id \}\); \},/);
+  assert.match(swaps, /recipient: swap\.payinAddress, amountSompi,/);
+  assert.match(swaps, /onClose: \(\) => \{ dock\.returnToTab\(\); showSwap\(\{ deposit: id \}\); \},/);
 });
 
 check("Send kUSDT's Swap for kUSDT goes straight to Sell Kaspa for kUSDT", () => {

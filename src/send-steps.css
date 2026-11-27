@@ -32,6 +32,8 @@ body.tab #app:has(> .ss-screen) { height: calc(100vh - 48px - var(--dock-h, 0px)
 .ss-question { margin: 0; font-size: 21px; font-weight: 750; line-height: 1.25; text-align: left; }
 .ss-question.ss-center { text-align: center; font-size: 18px; }
 .ss-note { margin: -4px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
+/* From is the address the Kaspa is going to (K-Desktop 76d4a7f) */
+.ss-note.error { color: #ff453a; }
 
 /* iOS SendContinueButton: an accent capsule pinned at the bottom, beside Cancel on a first step. */
 .ss-bar { flex: 0 0 auto; display: flex; gap: 10px; padding: 8px 18px 14px; background: var(--bg); }

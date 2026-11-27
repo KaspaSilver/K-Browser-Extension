@@ -47,6 +47,11 @@ html, body {
 body { width: 360px; min-height: 580px; }
 body.tab { width: auto; min-height: 100vh; }
 body.tab #shell { max-width: 420px; margin: 24px auto; border: 1px solid var(--line); border-radius: 18px; min-height: 620px; overflow: hidden; }
+/* Full screen (a tab): sheets and panels rise in the app's centered column, as wide as it, not across
+   the whole window; the ⋮ menu opens at the column's right edge. */
+body.tab .sheet-backdrop, body.tab .panel-backdrop, body.tab .kl-progress-backdrop { justify-content: center; }
+body.tab .sheet, body.tab .panel, body.tab .kl-progress-backdrop > * { width: 100%; max-width: 420px; }
+body.tab .menu-sheet { right: max(12px, calc(50% - 210px + 12px)); }
 
 /* The page column and, under it, the dock (iOS tab bar) on the screens that have one. */
 #shell { display: flex; flex-direction: column; min-height: 580px; }
@@ -355,6 +360,11 @@ button.link { background: transparent; color: var(--kaspa); padding: 0 0 4px; fo
 .nav-row-label { flex: 1; display: flex; align-items: center; gap: 12px; }
 .nav-row-label svg { color: var(--kaspa); }
 .nav-row-value { color: var(--muted); }
+/* Your Usernames while a name of yours is in grace (K b49a021d): "1 Expired" in red beside the count. */
+.nav-row-value:has(.nav-row-expired) { display: inline-flex; align-items: center; gap: 8px; }
+.nav-row-expired { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: #ff3b30; color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.nav-row-expired svg { width: 12px; height: 12px; }
+.nav-row-expired svg path:last-child { stroke: #ff3b30; }
 .chev { color: var(--muted); flex: none; }
 .danger-row { justify-content: space-between; color: #ff453a; }
 
@@ -1030,6 +1040,12 @@ button.kl-tile:not(:disabled), .kl-tile-split { cursor: pointer; }
 .kl-pill.kl-lapsed { color: #30d158; background: rgba(48,209,88,.15); }
 .kl-tile-expiry { margin-top: -6px; }
 .kl-tile-soon { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #ff9f0a; background: rgba(255,159,10,.15); }
+/* in grace (K b49a021d): the status pill red, and a card's "Expired: Renew Before Grace Ends" white on
+   red with a warning sign */
+.kl-pill.kl-grace.kl-pill-expired { color: #ff453a; background: rgba(255,69,58,.15); }
+.kl-badge-warning { display: inline-flex; align-items: center; gap: 4px; background: #ff3b30 !important; color: #fff !important; white-space: nowrap; max-width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis; }
+.kl-badge-warning svg { width: 12px; height: 12px; flex: 0 0 auto; fill: currentColor; stroke: none; }
+.kl-badge-warning svg .kl-warning-mark { fill: none; stroke: #ff3b30; stroke-width: 2.4; stroke-linecap: round; }
 .km-nav-actions { display: flex; align-items: center; gap: 2px; }
 .kl-claims-button { position: relative; }
 .kl-claims-count { position: absolute; top: 0; right: -2px; min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box; border-radius: 999px; background: var(--kaspa); color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; text-align: center; pointer-events: none; }
@@ -1311,6 +1327,15 @@ body.dock-on #app[data-screen="settings"] .form > * { flex-shrink: 0; }
 #app[data-screen="manage-list"] .manage-scroll > .bal-card, #app[data-screen="kusdt-manage"] .manage-scroll > .bal-card { margin: 4px 0 0; }
 .ac-head { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
 .ac-name { font-size: 17px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Rename in place (K b49a021d InlineRenameField): the name as a field in its own place and size; the
+   quantum tag steps aside while it's typed. */
+.ac-rename-input {
+  flex: 1 1 auto; min-width: 0; box-sizing: border-box; margin: 0; padding: 4px 8px;
+  font: inherit; font-size: 17px; font-weight: 600; color: var(--text);
+  background: rgba(127, 127, 127, .14); border: 1px solid rgba(112, 199, 186, .6); border-radius: 8px; outline: none;
+}
+.ac-rename-input::placeholder { color: var(--muted); font-weight: 500; }
+.managed-card.renaming .quantum-tag { display: none; }
 .ac-menu { margin-left: auto; color: var(--text); padding: 2px; }
 .ac-amount { font-size: 26px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; max-width: 100%; overflow-wrap: anywhere; }
 .ac-worth { font-size: 15px; color: var(--muted); }

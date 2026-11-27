@@ -14,6 +14,7 @@ import { showSheet, toast } from "./ui.js";
 import { ext } from "./browser.js";
 import * as wallet from "./wallet.js";
 import * as vault from "./vault.js";
+import { kusdtListedIndices } from "./kusdt.js";
 import { IS_TESTNET } from "./net.js";
 import { NETWORK_ID } from "../shared/engine/network.js";
 import { kusdtDeployment } from "../shared/engine/kusdt.js";
@@ -54,8 +55,9 @@ export async function openDebitCardBuy() {
   const accountId = (await vault.readAccounts()).activeAccountId;
   const owner = (await wallet.cachedAddresses(accountId))?.main || "";
   if (!owner) return;
-  // the next regular address (a swap payout's slot: never a quantum one), shown before it's handed out
-  const fresh = await wallet.nextSwapPayoutAddress().catch(() => null);
+  // the next regular address that has never been used (a swap payout's slot: never a quantum one,
+  // nor one holding kUSDT, and checked on chain - K-Desktop 76d4a7f), shown before it's handed out
+  const fresh = await wallet.nextSwapPayoutAddress({ skip: kusdtListedIndices() }).catch(() => null);
   const rows = [
     fresh?.address ? { label: "Fresh Address", subtitle: "A new address that has never been used, so this purchase stays apart from your username and chats.", icon: ICON.fresh, onClick: () => { handOut("fresh"); } } : null,
     { label: "Chatting Address", subtitle: "The address you chat from.", icon: ICON.chatting, onClick: () => { handOut("chatting"); } },
@@ -74,7 +76,7 @@ export async function openDebitCardBuy() {
       // the fresh address joins Manage Addresses (and kUSDT's lookups) now that it's handed out;
       // another window took that slot meanwhile: the new one is shown, nothing copied
       try {
-        address = (await wallet.reserveSwapPayoutAddress(fresh.address)).address;
+        address = (await wallet.reserveSwapPayoutAddress(fresh, { skip: kusdtListedIndices() })).address;
       } catch (error) {
         toast(error?.code === wallet.PAYOUT_CHANGED ? error.message : String(error?.message || error));
         return;

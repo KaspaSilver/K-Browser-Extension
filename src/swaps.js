@@ -43,15 +43,16 @@ import { drawKaspaQr } from "../shared/engine/qr.js";
 import {
   KAS, KUSDT_COIN, CURATED_COINS, USDC_POLYGON, GROUPED_TICKERS, PINNED_GROUP_TICKERS, SWAP_UNAVAILABLE_TITLE,
   sameCoin, isTrestlyCoin, coinByKey, cleanSwapAmount, createChangeNowClient, createSwapQuoter, rateLine, portfolioPrefill,
-  swapSourceTxId,
+  swapSourceTxId, displayTicker, kusdtSwapHistoryEntry,
 } from "../shared/ui/swap-quote.js";
+import { getEndpoint } from "../shared/engine/endpoints.js";
 import {
   quoteKusdtSwap, kusdtSwapAmountIn, kusdtQuoteText, kusdtRateText, minimumOut, swapRecord as kusdtSwapRecord, TRADE_CODE,
   tradeUnits, kasAmountLabel,
 } from "../shared/engine/kusdt-trade.js";
 import { formatKusdt, typedKusdt, KUSDT_TOKEN } from "../shared/engine/kusdt.js";
 import { approvalRows, approvalWarnings, approvalBlocked, APPROVE_ARM_MS, APPROVAL_TEXT } from "../shared/ui/swap-approval.js";
-import { kusdt } from "./kusdt.js";
+import { kusdt, kusdtListedIndices } from "./kusdt.js";
 import { swapTrade, runKusdtSwap, kusdtFromChoices, noteKusdtSwap, trestlyTermsUrl, kusdtUnitsAt, kusdtHoldingsFresh } from "./swap-kusdt.js";
 import { extraIdName, checkPayoutExtraId, withPayoutExtraId, payoutExtraIdKept, swapAnswerMatches } from "./swap-extra-id.js";
 
@@ -124,6 +125,30 @@ const statusClass = (s) => (s === "finished" ? "accent" : s === "failed" || s ==
 const dateText = (ms) => new Date(Number(ms) || Date.now()).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 const shortMiddle = (v) => (String(v || "").length > 20 ? `${String(v).slice(0, 12)}...${String(v).slice(-6)}` : String(v || ""));
 const fmt8 = (t) => (t === "" || t == null ? String(t ?? "") : Number.isFinite(Number(t)) ? Number(t).toFixed(8) : String(t));
+/** "10 KAS → 1.25 kUSDT": a kUSDT swap's amounts are as typed, a ChangeNOW quote to 8 places. */
+const historyLine = (swap) => `${esc(swap.fromAmount)} ${esc(displayTicker(swap.fromTicker))} → ${esc(swap.provider === "trestly" ? swap.toAmount : fmt8(swap.toAmount))} ${esc(displayTicker(swap.toTicker))}`;
+/** Which service ran it (K b49a021d): kUSDT swaps go through Trestly's pool on Kaspa. */
+const providerName = (swap) => (swap.provider === "trestly" ? "Trestly" : "ChangeNOW");
+/** A swap that has ended one way or another: nothing more to ask ChangeNOW (K d88891ea). */
+const SWAP_END_STATES = new Set(["finished", "failed", "refunded", "expired"]);
+/** Whether the network accepted a transaction: true, false (the REST API doesn't know it) or null
+ *  (no answer). A kUSDT swap's Refresh Status asks this, never ChangeNOW (K b49a021d, K-Desktop 1cbe77e). */
+async function transactionAccepted(txId) {
+  const base = String(getEndpoint("kaspaApi") || "").trim().replace(/\/+$/, "");
+  if (!/^https:\/\//i.test(base) || !/^[0-9a-fA-F]{64}$/.test(String(txId || ""))) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(`${base}/transactions/${encodeURIComponent(txId)}?inputs=false&outputs=false&resolve_previous_outpoints=no`, { headers: { Accept: "application/json" }, cache: "no-store", signal: controller.signal });
+    if (response.status === 404) return false;
+    if (response.status !== 200) return null;
+    return (await response.json())?.is_accepted === true;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Opens Buy/Sell at `start` ("buy", "sell" or "history"; K SwapView Start). `coin` ("kusdt", or
  *  "ticker:network") goes straight to the order for that coin, and `buying` (KAS under You Pay)
@@ -174,6 +199,21 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
     state.flowPath = [{ kind: finished ? "complete" : "deposit", id: deposit }];
   }
   const saveHistory = () => { state.history.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)); write(HISTORY_KEY, state.history); };
+  /** A kUSDT swap goes into Buy/Sell History with the ChangeNOW ones (K b49a021d recordKusdtSwap):
+   *  its Kaspa txid is its id, the address it traded from, Finished or Sending. */
+  const recordKusdtSwap = (record, address) => {
+    if (!record?.txid || record.amountIn == null || record.amountOut == null) return;
+    if (state.history.some((s) => s.id === record.txid)) return;
+    const entry = kusdtSwapHistoryEntry({
+      txid: record.txid, bought: record.bought, confirmed: record.confirmed,
+      kasText: typedKas(BigInt(record.bought ? record.amountIn : record.amountOut)),
+      kusdtText: typedKusdt(BigInt(record.bought ? record.amountOut : record.amountIn)),
+      address,
+    });
+    if (!entry) return;
+    state.history.unshift(entry);
+    saveHistory();
+  };
   const fromCoin = () => (state.kasIsSendSide ? KAS : state.otherCoin);
   const toCoin = () => (state.kasIsSendSide ? state.otherCoin : KAS);
   const payoutAddress = () => state.payoutOverride?.address || state.nextPayout?.address || "";
@@ -338,7 +378,7 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
         // the next never-used legacy slot, reserved now that the swap is real - unless one was
         // picked. It must be the one shown: another one is shown instead, and nothing is created.
         try {
-          address = state.payoutOverride?.address || (await wallet.reserveSwapPayoutAddress(state.nextPayout?.address || null)).address;
+          address = state.payoutOverride?.address || (await wallet.reserveSwapPayoutAddress(state.nextPayout || null, { skip: kusdtListedIndices() })).address;
         } catch (error) {
           if (error?.code !== wallet.PAYOUT_CHANGED) throw error;
           state.nextPayout = error.next;
@@ -408,7 +448,7 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
       state.estimate = { status: "idle" };
       state.payoutOverride = null;
       state.destination = "fresh";
-      state.nextPayout = await wallet.nextSwapPayoutAddress().catch(() => null);
+      state.nextPayout = await wallet.nextSwapPayoutAddress({ skip: kusdtListedIndices() }).catch(() => null);
       // its deposit screen (K: a ChangeNOW exchange made goes on to SwapDepositScreen)
       if (currentStep().kind === "form") { state.flowPath.push({ kind: "deposit", id: String(response.id) }); paint(); return; }
       toast("Order made. It's in Buy/Sell History.");
@@ -440,6 +480,8 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
       });
       const record = kusdtSwapRecord(done);
       noteKusdtSwap({ record, target, owner });
+      // and in Buy/Sell History, with the ChangeNOW orders (K b49a021d)
+      try { recordKusdtSwap(record, target.address); } catch { /* the history's own problem */ }
       // The address's KAS and kUSDT moved: read again after each of the wallet's lookups, which
       // follow the trade until its coins show (K 961fc05a TokenWallet.followTrade, K-Desktop
       // 9c30208); a trade with no txid gets one look.
@@ -510,11 +552,20 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
   };
 
   const refreshStatus = async (id) => {
+    // a kUSDT swap asks the network whether its transaction was accepted (K b49a021d)
+    const trestly = state.history.find((s) => s.id === id && s.provider === "trestly");
+    if (trestly) {
+      const accepted = await transactionAccepted(id);
+      if (accepted == null) return null;
+      if (accepted && trestly.status !== "finished") { trestly.status = "finished"; saveHistory(); }
+      return trestly.status;
+    }
     try {
       const status = (await client.status(id))?.status || null;
       if (!status) return null;
       const swap = state.history.find((s) => s.id === id);
-      if (swap) { swap.status = status; saveHistory(); }
+      // saved only when it moved (K d88891ea)
+      if (swap && swap.status !== status) { swap.status = status; saveHistory(); }
       if (state.create.result?.id === id) state.create.result = { ...state.create.result, status };
       return status;
     } catch (error) {
@@ -578,7 +629,7 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
     ? `<div class="swap-history">${state.history.map((swap) => `
         <div class="swap-history-item">
           <button class="glass swap-history-row" data-swap-open="${esc(swap.id)}">
-            <span class="tx-meta"><span class="strong small">${esc(swap.fromAmount)} ${esc(String(swap.fromTicker).toUpperCase())} → ${esc(fmt8(swap.toAmount))} ${esc(String(swap.toTicker).toUpperCase())}</span><span class="muted tiny">${esc(dateText(swap.createdAt))}</span></span>
+            <span class="tx-meta"><span class="strong small">${historyLine(swap)}</span><span class="muted tiny">${esc(dateText(swap.createdAt))} · ${esc(providerName(swap))}</span></span>
             <span class="small strong ${statusClass(swap.status)}">${esc(capitalize(swap.status))}</span>
           </button>
           <button class="icon plain muted" data-swap-delete="${esc(swap.id)}" aria-label="Delete order">${TRASH}</button>
@@ -749,7 +800,7 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
         <div class="sk-card swap-deposit-card"><span class="muted tiny">Amount to Send</span><span class="strong">${esc(`${groupedFigure(swap.fromAmount)} ${from.displayName}`)}</span>
           <button class="bar-text accent strong" data-swap-copy-amount="${esc(swap.fromAmount)}">Copy Amount</button></div>
         ${swap.payinExtraId ? `<div class="sk-card swap-result">${payinExtraHtml(swap.payinExtraIdName || "Extra ID", swap.payinExtraId)}</div>` : ""}
-        ${from.ticker === "kas" ? `<button class="big" data-swap-send-kas="${esc(swap.id)}">Send KAS from K</button>` : ""}
+        ${from.ticker === "kas" ? depositSendKasHtml(swap) : ""}
         <div class="sk-card swap-deposit-card"><span class="muted tiny">Transaction ID</span><span class="mono tiny swap-mono">${esc(swap.id)}</span>
           <div class="swap-links">
             <button class="bar-text accent strong" data-swap-copy-id="${esc(swap.id)}">Copy ID</button>
@@ -757,6 +808,18 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
           </div></div>
         ${swap.toAmount ? `<p class="muted tiny center-text">${esc(`You get about ${groupedFigure(swap.toAmount)} ${to.displayName}, sent to ${shortMiddle(swap.payoutAddress)}.`)}</p>` : ""}
       </div>`;
+  };
+  /** "Send KAS from K", only while the order waits for its deposit and K hasn't sent it; once sent,
+   *  that transaction instead (K d88891ea: the deposit could be paid twice before ChangeNOW saw it). */
+  const depositSendKasHtml = (swap) => {
+    if (swap.kasSendTxId) {
+      const txid = swap.kasSendTxId === "sent" ? "" : swap.kasSendTxId;
+      return `<div class="sk-card swap-deposit-card"><span class="muted tiny">Sent from K</span>${txid ? `<span class="mono tiny swap-mono">${esc(txid)}</span>
+          <button class="bar-text accent strong" data-swap-copy-txid="${esc(txid)}">Copy</button>` : '<span class="small">Sent</span>'}</div>`;
+    }
+    const status = String(swap.status || "new").toLowerCase();
+    if (status !== "new" && status !== "waiting") return "";
+    return `<button class="big" data-swap-send-kas="${esc(swap.id)}">Send KAS from K</button>`;
   };
   const completeHtml = (id) => {
     const swap = state.history.find((x) => x.id === id);
@@ -896,13 +959,15 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
       },
     });
   }
-  /** Checks ChangeNOW every 10 s while the deposit screen shows; a finished order becomes Complete. */
+  /** Checks ChangeNOW every 10 s while the deposit screen shows; a finished order becomes Complete,
+   *  and any other end stops the checks (K d88891ea). */
   let depositTimer = null;
   function syncDepositPolling(step) {
     const wanted = step.kind === "deposit" && state.agreed && handle?.isOpen() && !document.hidden;
     if (!wanted) { clearTimeout(depositTimer); depositTimer = null; return; }
     if (depositTimer) return;
     const id = step.id;
+    if (SWAP_END_STATES.has(String(state.history.find((x) => x.id === id)?.status || "").toLowerCase())) return;
     depositTimer = setTimeout(async () => {
       depositTimer = null;
       const status = await refreshStatus(id);
@@ -961,11 +1026,33 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
     const swap = state.history.find((s) => s.id === id);
     if (!swap) return;
     const sheet = openPanel({ title: "Swap Details", leading: "Done", full: true, stack: true, body: '<div data-details class="swap-details"></div>' });
+    const trestly = swap.provider === "trestly";
+    const statusHtml = () => `<div class="sk-label">Status</div>
+        <div class="sk-card"><div class="sk-from-row"><span class="strong ${statusClass(swap.status)}">${esc(capitalize(swap.status))}</span>${swap.status === "finished" ? '<button class="bar-text accent strong" data-swap-portfolio>Add to Portfolio</button>' : ""}</div></div>`;
+    const refreshHtml = (refreshing) => `<button class="bar-text accent strong" data-swap-refresh-detail ${refreshing ? "disabled" : ""}>${refreshing ? '<span class="spinner small-spin"></span>' : "Refresh Status"}</button>`;
+    // A kUSDT swap through Trestly's pool on Kaspa (K b49a021d): the address it traded from, its
+    // status and its Kaspa transaction. No deposit address or exchange ID: nothing went to a third party.
+    const trestlyHtml = (refreshing) => `
+        <div class="sk-card swap-result">
+          <span class="strong small">${historyLine(swap)}</span>
+          <span class="muted tiny">${esc(dateText(swap.createdAt))}</span>
+        </div>
+        <div class="sk-label">Swapped Through</div>
+        <div class="sk-card"><span class="small">Trestly's kUSDT pool on Kaspa</span></div>
+        <div class="sk-label">Address</div>
+        <div class="sk-card"><button class="mono tiny swap-mono" data-swap-copy="${esc(swap.payoutAddress)}">${esc(swap.payoutAddress)}</button></div>
+        ${statusHtml()}
+        <div class="sk-label">Transaction ID</div>
+        <div class="sk-card"><button class="mono tiny swap-mono" data-swap-copy-txid="${esc(swap.id)}">${esc(swap.id)}</button></div>
+        <div class="swap-links">
+          ${refreshHtml(refreshing)}
+          <a class="bar-text accent strong" href="${esc(wallet.explorerTxUrl(swap.id))}" target="_blank" rel="noopener noreferrer">View in Explorer</a>
+        </div>`;
     const draw = (refreshing = false) => {
       const host = sheet.panel.querySelector("[data-details]");
-      host.innerHTML = `
+      host.innerHTML = trestly ? trestlyHtml(refreshing) : `
         <div class="sk-card swap-result">
-          <span class="strong small">${esc(swap.fromAmount)} ${esc(String(swap.fromTicker).toUpperCase())} → ${esc(fmt8(swap.toAmount))} ${esc(String(swap.toTicker).toUpperCase())}</span>
+          <span class="strong small">${historyLine(swap)}</span>
           <span class="muted tiny">${esc(dateText(swap.createdAt))}</span>
           <canvas class="swap-qr" data-swap-qr="${esc(swap.payinAddress)}" width="180" height="180"></canvas>
         </div>
@@ -975,12 +1062,11 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
         <div class="sk-card swap-result">${payinExtraHtml(swap.payinExtraIdName || "Extra ID", swap.payinExtraId)}</div>` : ""}
         ${swap.payoutExtraId ? `<div class="sk-label">Payout ${esc(swap.payoutExtraIdName || "Extra ID")}</div>
         <div class="sk-card"><button class="mono tiny swap-mono" data-swap-copy-extra="${esc(swap.payoutExtraId)}" data-swap-extra-name="${esc(swap.payoutExtraIdName || "Extra ID")}">${esc(swap.payoutExtraId)}</button></div>` : ""}
-        <div class="sk-label">Status</div>
-        <div class="sk-card"><div class="sk-from-row"><span class="strong ${statusClass(swap.status)}">${esc(capitalize(swap.status))}</span>${swap.status === "finished" ? '<button class="bar-text accent strong" data-swap-portfolio>Add to Portfolio</button>' : ""}</div></div>
+        ${statusHtml()}
         <div class="sk-label">ChangeNOW Exchange ID</div>
         <div class="sk-card"><button class="mono tiny swap-mono" data-swap-copy-id="${esc(swap.id)}">${esc(swap.id)}</button></div>
         <div class="swap-links">
-          <button class="bar-text accent strong" data-swap-refresh-detail ${refreshing ? "disabled" : ""}>${refreshing ? '<span class="spinner small-spin"></span>' : "Refresh Status"}</button>
+          ${refreshHtml(refreshing)}
           <a class="bar-text accent strong" href="https://changenow.io/exchange/txs/${encodeURIComponent(swap.id)}" target="_blank" rel="noopener noreferrer">View on ChangeNOW</a>
         </div>`;
       drawQrs(host);
@@ -988,7 +1074,7 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
       host.querySelector("[data-swap-refresh-detail]").onclick = async () => {
         draw(true);
         const status = await refreshStatus(swap.id);
-        toast(status ? `Status: ${capitalize(status)}` : "Couldn't reach ChangeNOW - try again");
+        toast(status ? `Status: ${capitalize(status)}` : trestly ? "Couldn't reach the network - try again" : "Couldn't reach ChangeNOW - try again");
         if (sheet.isOpen()) draw(false);
         paint();
       };
@@ -1027,6 +1113,7 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
     for (const b of root.querySelectorAll("[data-swap-copy]")) b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.swapCopy); toast("Address copied to clipboard."); } catch { /* refused */ } };
     for (const b of root.querySelectorAll("[data-swap-copy-id]")) b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.swapCopyId); toast("Exchange ID copied"); } catch { /* refused */ } };
     for (const b of root.querySelectorAll("[data-swap-copy-extra]")) b.onclick = () => copyExtra(b);
+    for (const b of root.querySelectorAll("[data-swap-copy-txid]")) b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.swapCopyTxid); toast("Transaction ID copied"); } catch { /* refused */ } };
   }
   async function copyExtra(button) {
     try { await navigator.clipboard.writeText(button.dataset.swapCopyExtra); toast(`${button.dataset.swapExtraName || "Extra ID"} copied`); } catch { /* refused */ }
@@ -1158,6 +1245,8 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
     // the deposit screen
     const copyAmount = t.closest("[data-swap-copy-amount]");
     if (copyAmount) { try { await navigator.clipboard.writeText(copyAmount.dataset.swapCopyAmount); toast("Amount copied"); } catch { /* refused */ } return; }
+    const copyTxid = t.closest("[data-swap-copy-txid]");
+    if (copyTxid) { try { await navigator.clipboard.writeText(copyTxid.dataset.swapCopyTxid); toast("Transaction ID copied"); } catch { /* refused */ } return; }
     const sendKas = t.closest("[data-swap-send-kas]");
     if (sendKas) { sendKasFromK(sendKas.dataset.swapSendKas); return; }
     const addPortfolio = t.closest("[data-swap-add-portfolio]");
@@ -1189,21 +1278,33 @@ export async function showSwap({ start = "buy", coin = null, buying = false, dep
   /** The deposit screen's Send KAS from K (K SwapDepositScreen): Send Kaspa filled in with the
    *  deposit's address and amount; back on this order's deposit screen afterwards. */
   async function sendKasFromK(id) {
+    const markSent = (txid) => {
+      const saved = read(HISTORY_KEY, []);
+      const order = Array.isArray(saved) ? saved.find((x) => x.id === id) : null;
+      if (!order) return;
+      order.kasSendTxId = txid || "sent";
+      write(HISTORY_KEY, saved);
+    };
     const swap = state.history.find((x) => x.id === id);
     const amountSompi = swap ? sompiFromUserText(String(swap.fromAmount || "")) : null;
-    if (!swap?.payinAddress || amountSompi == null || !main) return;
+    if (!swap?.payinAddress || swap.kasSendTxId || amountSompi == null || !main) return;
     const [{ showSend }, dock] = await Promise.all([import("./send.js"), import("./dock.js")]);
     handle.close();
     showSend({
       source: { kind: "main" }, fromAddress: main, navTitle: "Send Kaspa",
       recipient: swap.payinAddress, amountSompi,
+      // the send is recorded on the order, so its button gives way to it (K d88891ea): the
+      // deposit can't be paid twice before ChangeNOW sees it
+      onSent: ({ txid } = {}) => markSent(txid),
+      // it may land: marked sent too, so it isn't paid again (K iOS d88891ea)
+      onOutcomeUnknown: ({ txid } = {}) => markSent(txid),
       onClose: () => { dock.returnToTab(); showSwap({ deposit: id }); },
     });
   }
   paint();
   refreshKusdtBalances();
   if (currentStep().kind === "destination" && isKusdt()) loadKusdtDestinations();
-  wallet.nextSwapPayoutAddress().then((next) => {
+  wallet.nextSwapPayoutAddress({ skip: kusdtListedIndices() }).then((next) => {
     state.nextPayout = next;
     if (currentStep().kind === "destination") paint(); else paintForm();
   }).catch(() => {});

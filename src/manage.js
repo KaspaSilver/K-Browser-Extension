@@ -66,6 +66,8 @@ import { showAddToPortfolio } from "./portfolio.js";
 import { loadOwnAddresses, ownAddressLabel } from "./own-addresses.js";
 import { ownHistoryAmount } from "../shared/engine/history-amounts.js";
 import { bindSwipeToHide } from "./swipe-hide.js";
+import { startInlineRename, inlineRenameActive } from "./inline-rename.js";
+import { spendingIndexTitle } from "../shared/engine/quantum.js";
 import { kusdtListedIndices } from "./kusdt.js";
 import { KUSDT_LISTED_HIDE_MESSAGE, KUSDT_LISTED_ALERT_TITLE } from "../shared/ui/kusdt-wallet.js";
 
@@ -108,6 +110,11 @@ const CARD_ICONS = {
   send: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
   receive: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
   rename: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.9 4.5a2.1 2.1 0 0 1 3 3L8.5 18.9 4 20l1.1-4.5Z"/></svg>',
+  // a Cold Storage account's card (K iOS b49a021d ColdStorageAccountCard, K-Desktop 9024bfe): kpub
+  // QR, and Alerts On / Off (bell.fill / bell.slash)
+  qr: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1"/><path d="M14 14h2.8v2.8H14zM17.8 17.8h2.7v2.7M20.5 14v.5"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
+  bellSlash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.6A6 6 0 0 1 18 11v4M6 11v5l-1.5 2H17"/><path d="M10 20.5a2 2 0 0 0 4 0M3 3l18 18"/></svg>',
 };
 const CHEVRON_SMALL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 
@@ -123,18 +130,23 @@ const CHEVRON_SMALL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6
  * @param {boolean|null|"checking"} [o.used]  Used / Unused, Checking while unknown
  * @param {string} [o.extraHtml] under Used: Contains username, KAS held with it
  * @param {{action:string,title:string,icon:string,disabled?:boolean}[]} o.buttons
+ * Cold Storage's cards (K iOS b49a021d, K-Desktop 9024bfe) also use:
+ * @param {string} [o.leadHtml]   before the name: an account's lock
+ * @param {string} [o.cornerHtml] the top right instead of a ⋮: an account's trash, an address's Hide
+ * @param {boolean} [o.showsUsage] false on an account's card: no Used / Unused
+ * @param {string} [o.footer]     "Tap to View Addresses" on an account's card
  */
-export function managedAddressCardHtml({ attrs, name, tagHtml = "", menuAttr = null, amountHtml, worth = "", used = null, extraHtml = "", buttons }) {
+export function managedAddressCardHtml({ attrs, name, tagHtml = "", menuAttr = null, amountHtml, worth = "", used = null, extraHtml = "", buttons, leadHtml = "", cornerHtml = "", showsUsage = true, footer = "Tap to View History" }) {
   const usage = used === true ? '<span class="ac-usage used">Used</span>' : used === false ? '<span class="ac-usage unused">Unused</span>' : '<span class="ac-usage checking">Checking</span>';
   return `
     <div class="managed-card" ${attrs} role="button" tabindex="0">
-      <div class="ac-head"><span class="ac-name">${esc(name)}</span>${tagHtml}${menuAttr ? `<button type="button" class="icon plain ac-menu" ${menuAttr} aria-label="More for ${esc(name)}">${SF.ellipsisV}</button>` : ""}</div>
+      <div class="ac-head">${leadHtml}<span class="ac-name">${esc(name)}</span>${tagHtml}${menuAttr ? `<button type="button" class="icon plain ac-menu" ${menuAttr} aria-label="More for ${esc(name)}">${SF.ellipsisV}</button>` : ""}${cornerHtml}</div>
       <div class="ac-amount">${amountHtml}</div>
       ${worth ? `<div class="ac-worth">${esc(worth)}</div>` : ""}
-      ${usage}
+      ${showsUsage ? usage : ""}
       ${extraHtml}
       <div class="ac-actions">${buttons.map((b) => `<button type="button" class="ac-action" data-card-action="${esc(b.action)}"${b.disabled ? " disabled" : ""}><span class="ac-action-circle">${CARD_ICONS[b.icon]}</span><span>${esc(b.title)}</span></button>`).join("")}</div>
-      <div class="ac-history">Tap to View History${CHEVRON_SMALL}</div>
+      <div class="ac-history">${esc(footer)}${CHEVRON_SMALL}</div>
     </div>`;
 }
 
@@ -791,16 +803,22 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     }
   };
 
-  const renameAddress = (row) => showAlert({
-    title: "Rename Address",
-    message: "Give this address a label to help you recognize it.",
-    field: { placeholder: "Label", value: row.customLabel || "" },
-    confirmLabel: "Save",
-    cancelLabel: "Cancel",
-    onConfirm: async (value) => {
-      try { await wallet.setSpendingLabel(row.index, value); } catch (error) { toast(error.message); }
+  // In place, no pop-up (K iOS b49a021d InlineRename, K-Desktop 6b42f14): the card's name becomes a
+  // field starting from the address's own label (empty when it has none), saved when it ends; empty
+  // goes back to "Address #n".
+  const renameAddress = (row) => startInlineRename(app.querySelector(`[data-open="${row.index}"]`), {
+    key: `spending:${row.index}`,
+    current: row.customLabel || "",
+    placeholder: spendingIndexTitle(row.index),
+    onChange: async (value) => {
+      const text = String(value).trim();
+      // shown at once; the reload below brings what was saved
+      row.customLabel = text;
+      row.label = text || spendingIndexTitle(row.index);
+      try { await wallet.setSpendingLabel(row.index, text); } catch (error) { toast(error.message); }
       load();
     },
+    onDone: () => paint(),
   });
 
   const hideAddress = async (row) => {
@@ -892,6 +910,8 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
   }
 
   function paint() {
+    // a card's name is being typed: the rename's end repaints (inline-rename.js)
+    if (inlineRenameActive()) return;
     const rows = sortRows(visibleRows(), state.used);
     // every address of the account, hidden ones and the chatting address too (iOS 245a5d2)
     const total = (state.list?.rows || []).reduce((sum, r) => sum + r.balanceSompi, 0n) + BigInt(state.chatting?.balance ?? 0n);

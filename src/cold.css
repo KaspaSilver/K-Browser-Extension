@@ -11,43 +11,36 @@ body.tab #app[data-screen^="cold:"], body.tab #app[data-screen="cold-visibility"
 }
 
 .cold-nav-title { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
-.cold-caption { font-size: 12px; }
 .cold-vis-head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .cold-bold { font-weight: 800; }
-.underline-text { text-decoration: underline; }
 .cold-destructive { color: #ff453a !important; }
 
-/* --- the list ----------------------------------------------------------------------------- */
+/* --- the list: each account on Manage Addresses' card (K iOS b49a021d ColdStorageAccountCard,
+   K-Desktop 9024bfe coldstorage-cards.css). The card is styles.css's .managed-card. ------------ */
 .cold-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 6px 16px 16px; }
 .cold-scroll > * { flex-shrink: 0; }
 .cold-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 40px 24px; }
 .cold-empty-title { font-weight: 700; font-size: 16px; }
 .cold-empty p { font-size: 14px; }
-.cold-account { display: flex; align-items: center; gap: 12px; padding: 16px; cursor: pointer; }
-.cold-account:focus-visible { outline: 2px solid var(--kaspa); }
-.cold-account .tx-meta { gap: 4px; }
-.cold-account-lock { display: inline-flex; flex: none; }
-.cold-account-label { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cold-more { color: var(--muted); flex: none; }
 .cold-list-bar { padding: 10px 16px 16px; background: transparent; }
+/* the account card's lock before its name (lock.fill in the accent) */
+.cold-card-lock { display: inline-flex; flex: none; }
+/* the top right: an account's red trash, a regular address's Hide (eye with a slash) */
+button.cold-card-corner { margin-left: auto; flex: none; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; color: var(--muted); }
+.cold-card-corner svg { width: 18px; height: 18px; }
+button.cold-card-corner:hover { background: transparent; }
+button.cold-card-trash { color: #ff453a; }
 
-/* --- one account ------------------------------------------------------------------------- */
-.cold-trash { color: #ff453a; }
-.cold-trash:hover { background: transparent; }
+/* --- one account, laid out as Manage Addresses (K iOS b49a021d) ---------------------------- */
 .cold-detail { gap: 12px; }
-.cold-summary { display: flex; flex-direction: column; gap: 18px; padding: 8px 4px 6px; }
-.cold-summary .tx-meta { gap: 2px; }
-.cold-summary-name { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.cold-name { font-size: 15px; word-break: break-word; }
-.cold-pencil { width: 32px; height: 32px; flex: none; }
-.cold-total { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+/* the Total Balance card as wide as the address cards under it */
+#app[data-screen="cold:account"] .manage-scroll > .bal-card { margin: 4px 0 0; }
+/* Discover Addresses' progress, under the Total Balance (K iOS b49a021d discoveryStatus) */
+.cold-discovery { display: flex; align-items: center; gap: 8px; margin: -2px 4px 0; min-width: 0; }
+.cold-discovery .strong { font-size: 14px; white-space: nowrap; }
+.cold-discovery-found { margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .cold-loading { padding-top: 20px; }
 .cold-none { padding: 4px 4px 0; }
-.cold-address { gap: 8px; }
-.cold-row-label { font-size: 12px; font-weight: 700; }
-.cold-row-address { font-size: 14px; }
-.cold-row-amount { font-size: 14px; font-variant-numeric: tabular-nums; }
-.cold-keep-scanning { justify-content: center; }
 
 /* --- the field half sheet (Enter kpub, Name This Account, Rename) ---------------------------- */
 .cold-field-sheet { gap: 12px; padding: 6px 20px 24px; }
@@ -64,10 +57,12 @@ textarea.cold-field { min-height: 0; resize: none; font-size: 13px; line-height:
   .cold-field, .cold-sheet-cancel { background: rgba(255, 255, 255, .8); border-color: rgba(0, 0, 0, .08); }
 }
 
-/* --- the kpub QR (white page) -------------------------------------------------------------- */
-.cold-kpub-page { gap: 16px; }
-.cold-kpub-frame canvas { width: 230px !important; height: 230px !important; }
-.cold-kpub-note { font-size: 13px; color: rgba(0, 0, 0, .45); margin: 0; padding: 0 12px; }
+/* --- the kpub QR, in the receive screens' look (K iOS b49a021d ColdStorageKpubQRView, "Watch This
+   Account"): styles.css's .rcv page, the lock in an accent circle, an orange eye on its note. ---- */
+.cold-kpub-icon { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--kaspa); color: #000; }
+.cold-kpub-icon svg { width: 15px; height: 15px; }
+.cold-kpub-eye { padding: 0 8px; }
+.cold-kpub-eye .rcv-note-icon { color: #ff9f0a; }
 
 /* --- one address ------------------------------------------------------------------------- */
 .cold-address-balance { padding-top: 8px; flex: none; }
