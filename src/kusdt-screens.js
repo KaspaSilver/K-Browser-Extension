@@ -5,8 +5,9 @@
 //
 //   the Wallet tab's kUSDT card (on the card pager beside Kaspa's), Send's
 //   "What are you sending?", Send kUSDT (To / From / How much / Review) with Fund This Address,
-//   Combine Coins, Manage kUSDT (its row menu, kUSDT Actions, kUSDT Address Visibility), an
-//   address's page and history, About kUSDT, Receive kUSDT and the kUSDT Guide.
+//   Combine Coins, Manage kUSDT (laid out as Manage Addresses since K iOS 824a30bb: a card per
+//   address, kUSDT Address Visibility and Discover at the top right, the floating + adding a fresh
+//   regular address), an address's page and history, About kUSDT, Receive kUSDT and the kUSDT Guide.
 //
 // As on Desktop (owner, 2026-11-20): Trestly's site isn't shown inside K (a browser page can't
 // hand a wallet to it), so there's no connect sheet and no Bridged rows; Manage kUSDT's Open
@@ -49,6 +50,7 @@ import {
 import { recipientCardHtml, recipientStatusHtml, recipientLookup, bindAddressBookButton } from "./send-pieces.js";
 import { scanQr } from "./camera.js";
 import { entryFor, entryName } from "./address-book.js";
+import { managedAddressCardHtml } from "./manage.js";
 import "./kusdt.css";
 
 const SYMBOL = KUSDT_TOKEN.symbol;
@@ -759,6 +761,9 @@ export function openCombineCoins(holding, { onBack }) {
 
 // --- §7 Manage kUSDT ----------------------------------------------------------------------------
 
+// the floating + (K iOS 824a30bb: a fresh regular address)
+const PLUS = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+
 /** Manage kUSDT (iOS TokenManageView). Also where a "Received X kUSDT" notification goes. */
 export function openManageKusdt({ onBack }) {
   if (!kusdtAccount()) return;
@@ -775,20 +780,29 @@ export function openManageKusdt({ onBack }) {
     used = new Set((w.heldHoldings() || []).filter((h) => h.spendingIndex != null && known.has(h.address.toLowerCase())).map((h) => h.spendingIndex));
   }).catch(() => {});
 
+  // Each address on Manage Addresses' card (K iOS 824a30bb ManagedAddressCard): no quantum tag
+  // (kUSDT is never on a quantum address), Copy, Send, Receive and Rename (not the Chatting
+  // Address), Tap to View History; the ⋮ holds Send to Chatting Address, Combine Coins (more than one
+  // coin) and Hide, the Chatting Address's only Combine Coins.
+  const hasMenu = (h) => h.spendingIndex != null || h.coinCount > 1;
   const rowHtml = (h) => {
     const chatting = h.spendingIndex == null;
     const isUsed = isHoldingUsed(h, { usedIndices: used, activity: w.activity() });
-    return `
-      <div class="glass address-card kusdt-row" data-open="${esc(h.id)}" role="button" tabindex="0">
-        <div class="address-card-main">
-          <span class="muted small medium kusdt-row-label">${esc(labelOf(h))}<span class="kusdt-row-icon${chatting ? " accent" : ""}">${chatting ? KUSDT_ICONS.chat : ""}</span></span>
-          <span class="mono small">${esc(shortKusdtAddress(h.address))}</span>
-          <span class="strong small">${esc(formatKusdt(h.units))}</span>
-          <span class="muted tiny">${esc(`${kas(BigInt(h.coinCount) * KAS_PER_COIN)} held with it`)}</span>
-          <span class="address-status"><span class="used-badge ${isUsed ? "used" : "unused"}">${isUsed ? "Used" : "Unused"}</span></span>
-        </div>
-        <button class="icon plain card-menu" data-menu="${esc(h.id)}" aria-label="Address Actions">${KUSDT_ICONS.ellipsisVertical}</button>
-      </div>`;
+    return managedAddressCardHtml({
+      attrs: `data-open="${esc(h.id)}"`,
+      name: labelOf(h),
+      menuAttr: hasMenu(h) ? `data-menu="${esc(h.id)}"` : null,
+      amountHtml: esc(formatKusdt(h.units)),
+      worth: kusdtDollars(h.units),
+      used: isUsed,
+      extraHtml: `<span class="ac-extra">${esc(`${kas(BigInt(h.coinCount) * KAS_PER_COIN)} held with it`)}</span>`,
+      buttons: [
+        { action: "copy", icon: "copy", title: "Copy" },
+        { action: "send", icon: "send", title: "Send", disabled: !(h.units > 0n) },
+        { action: "receive", icon: "receive", title: "Receive" },
+        ...(chatting ? [] : [{ action: "rename", icon: "rename", title: "Rename" }]),
+      ],
+    });
   };
 
   const paint = () => {
@@ -796,12 +810,15 @@ export function openManageKusdt({ onBack }) {
     const rows = w.listed();
     const hidden = w.hiddenCount();
     const held = w.heldHoldings();
-    const busy = Boolean(discovering);
+    const busy = Boolean(discovering) || generating;
     render(`
       <header class="navbar">
         <button class="nav-back" id="back" aria-label="Back">${ICONS.back}<span>Back</span></button>
         <div class="nav-title">Manage ${esc(SYMBOL)}</div>
-        <div class="nav-right"><button class="icon plain accent" id="kusdt-refresh" aria-label="Refresh" title="Refresh" ${w.refreshing ? "disabled" : ""}>${KUSDT_ICONS.refresh}</button></div>
+        <div class="nav-right bar-circles">
+          <button class="bar-circle" id="kusdt-refresh" aria-label="Discover ${esc(SYMBOL)} Addresses" title="Discover ${esc(SYMBOL)} Addresses" ${discovering || w.refreshing ? "disabled" : ""}>${discovering || w.refreshing ? '<span class="spinner small-spin"></span>' : KUSDT_ICONS.refresh}</button>
+          <button class="bar-circle" id="kusdt-visibility" aria-label="${esc(SYMBOL)} Address Visibility" title="${esc(SYMBOL)} Address Visibility" ${discovering ? "disabled" : ""}>${KUSDT_ICONS.checklist}</button>
+        </div>
       </header>
       <div class="manage-scroll">
         <div class="bal-card kusdt-total">
@@ -822,40 +839,50 @@ export function openManageKusdt({ onBack }) {
         ${hidden > 0 ? `<button type="button" class="link-button kusdt-hidden-note" id="kusdt-hidden">${esc(`${hidden} hidden: they still count in the total.`)}</button>` : ""}
         <div class="fab-room"></div>
       </div>
-      <button class="fab" id="kusdt-actions" aria-label="${esc(SYMBOL)} Actions" title="${esc(SYMBOL)} Actions" ${busy ? "disabled" : ""}>${busy ? '<span class="spinner small-spin"></span>' : KUSDT_ICONS.sliders}</button>`, "kusdt-manage");
+      <button class="fab" id="kusdt-new" aria-label="New Address" title="New Address" ${busy ? "disabled" : ""}>${busy ? '<span class="spinner small-spin"></span>' : PLUS}</button>`, "kusdt-manage");
     $("#back").onclick = onBack;
-    $("#kusdt-refresh").onclick = async () => { await w.discover().catch(() => null); };
+    // Discover kUSDT Addresses (K iOS pulls the list down for it): its progress in a sheet
+    $("#kusdt-refresh").onclick = openDiscover;
+    $("#kusdt-visibility").onclick = () => { if (!discovering) openVisibility({ onBack: back }); };
     $("#kusdt-about").onclick = () => openAboutKusdt({ onBack: back });
     // Open Trestly (K iOS 518fdc8c, owner 2026-11-23): Trestly's site, for its pool and everything
     // else there. K iOS shows it inside the app connected to one address; here it is a new tab.
     $("#kusdt-open-trestly").onclick = () => openExternal(kusdtDeployment(NETWORK).siteUrl);
-    $("#kusdt-actions").onclick = openActions;
+    // the floating + adds a fresh regular address (K iOS 824a30bb)
+    $("#kusdt-new").onclick = generate;
     const hiddenNote = $("#kusdt-hidden");
     if (hiddenNote) hiddenNote.onclick = () => openVisibility({ onBack: back });
     for (const card of app.querySelectorAll("[data-open]")) {
       card.onclick = (event) => {
-        if (event.target.closest("[data-menu]")) return;
+        if (event.target.closest("[data-menu]")) { rowMenu(card.dataset.open); return; }
+        const button = event.target.closest("[data-card-action]");
+        if (button) { if (!button.disabled) cardAction(card.dataset.open, button.dataset.cardAction); return; }
         openAddressPage(card.dataset.open, { onBack: back });
       };
-      card.onkeydown = (event) => { if (event.key === "Enter") card.click(); };
+      card.onkeydown = (event) => { if (event.key === "Enter" && event.target === card) card.click(); };
     }
-    for (const button of app.querySelectorAll("[data-menu]")) button.onclick = () => rowMenu(button.dataset.menu);
+  };
+
+  /** A card's own buttons: Copy, Send, Receive, Rename. */
+  const cardAction = (id, action) => {
+    const h = w.holdingById(id);
+    if (!h) return;
+    if (action === "copy") copyText(h.address);
+    else if (action === "send" && h.units > 0n) openKusdtSend({ startFrom: h, onBack: back });
+    else if (action === "receive") openKusdtReceive({ fixedHolding: h, onBack: back });
+    else if (action === "rename" && h.spendingIndex != null) rename(h);
   };
 
   const rowMenu = (id) => {
     const h = w.holdingById(id);
     if (!h) return;
-    // The Chatting Address's menu has only Copy, Show QR Code and Combine Coins (KaChat iOS
-    // 148a5331): it can't be renamed, hidden or sent to itself.
+    // The Chatting Address's ⋮ has only Combine Coins: it can't be renamed, hidden or sent to itself.
     const chatting = h.spendingIndex == null;
     showSheet({
       title: labelOf(h),
       subtitle: shortKusdtAddress(h.address),
       cancel: false,
       rows: [
-        ...(chatting ? [] : [{ label: "Rename Address", subtitle: "Gives this address a label of your own.", icon: ICONS.pencil, onClick: () => rename(h) }]),
-        { label: "Copy Address", subtitle: "Puts the full address on the clipboard.", icon: ICONS.doc, onClick: () => copyText(h.address) },
-        { label: "Show QR Code", subtitle: "Full screen, for scanning with another device.", icon: ICONS.qr, onClick: () => openKusdtReceive({ fixedHolding: h, onBack: back }) },
         ...(chatting ? [] : [{
           label: "Send to Chatting Address", subtitle: "Moves kUSDT from this address to your Chatting Address.", icon: KUSDT_ICONS.send,
           disabled: !(h.units > 0n),
@@ -883,13 +910,7 @@ export function openManageKusdt({ onBack }) {
     },
   });
 
-  // kUSDT Actions (iOS actionsSheet): Generate, Discover, Visibility. Discover belongs to the
-  // screen: closing the sheet doesn't stop it.
-  const actionRows = () => [
-    { label: "Generate New Address", subtitle: "Adds a brand-new regular address of yours to this list.", icon: KUSDT_ICONS.plusSquares, disabled: Boolean(discovering), onClick: generate },
-    { label: "Discover kUSDT Addresses", subtitle: "Finds your addresses holding kUSDT.", icon: KUSDT_ICONS.magnifier, disabled: Boolean(discovering), keepOpen: true, onClick: runDiscover },
-    { label: "kUSDT Address Visibility", subtitle: "Check off which addresses holding kUSDT are on the list.", icon: KUSDT_ICONS.checklist, disabled: Boolean(discovering), onClick: () => openVisibility({ onBack: back }) },
-  ];
+  // Discover kUSDT Addresses: closing its sheet doesn't stop it.
   const footerHtml = () => {
     if (discovering) {
       return `<div class="discovery">
@@ -907,17 +928,24 @@ export function openManageKusdt({ onBack }) {
   };
   const refreshActions = () => {
     if (!actions?.isOpen()) return;
-    actions.update({ rows: discovering ? [] : actionRows(), footerHtml: footerHtml() });
+    actions.update({ rows: [], footerHtml: footerHtml() });
     bindKeep();
   };
-  function openActions() {
+  function openDiscover() {
+    if (discovering) return;
     summary = "";
-    actions = showSheet({ title: `${SYMBOL} Actions`, cancel: false, rows: discovering ? [] : actionRows(), footerHtml: footerHtml() });
+    actions = showSheet({ title: `Discover ${SYMBOL} Addresses`, subtitle: `Finds your addresses holding ${SYMBOL}.`, cancel: false, rows: [], footerHtml: footerHtml() });
     bindKeep();
+    runDiscover();
   }
+  let generating = false;
   async function generate() {
+    if (generating || discovering) return;
+    generating = true;
+    if (app.dataset.screen === "kusdt-manage") paint();
     const number = await w.generateFresh().catch(() => null);
     try { await syncKusdtAccount(); } catch { /* shown on the next sync */ }
+    generating = false;
     if (number != null) toast(`Address #${number} is ready.`);
     if (app.dataset.screen === "kusdt-manage") paint();
   }
@@ -942,7 +970,7 @@ export function openManageKusdt({ onBack }) {
     if (kusdtAccount() !== owner) return;
     if (found != null) {
       summary = found === 0 ? `No addresses with ${SYMBOL} found.` : `Found ${found} addresses with ${SYMBOL}.`;
-      toast(summary);
+      if (!actions?.isOpen()) toast(summary);
     }
     refreshActions();
     if (app.dataset.screen === "kusdt-manage") paint();
@@ -1063,9 +1091,11 @@ function activityRowHtml(row) {
   </${tag}>`;
 }
 
-function openAddressPage(id, { onBack }) {
+/** An address's page (K iOS TokenAddressView): the full address on its card; no Send / Receive (K
+ *  iOS 824a30bb: they're on Manage kUSDT's card) unless `showsSendReceive`. */
+function openAddressPage(id, { onBack, showsSendReceive = false }) {
   const w = W();
-  const back = () => openAddressPage(id, { onBack });
+  const back = () => openAddressPage(id, { onBack, showsSendReceive });
   const paint = () => {
     const h = w.holdingById(id);
     if (!h) { onBack(); return; }
@@ -1081,19 +1111,22 @@ function openAddressPage(id, { onBack }) {
           <div class="bal-card-label">${esc(labelOf(h))}</div>
           <div class="bal-card-amount">${esc(formatKusdt(h.units))}</div>
           <div class="bal-card-detail">${esc(`${kas(BigInt(h.coinCount) * KAS_PER_COIN)} held with it`)}</div>
+          <div class="bal-card-address mono selectable">${esc(h.address)}</div>
         </div>
         <div class="kusdt-section-label">${esc(SYMBOL)} History</div>
         ${rows.length
     ? `<div class="glass list">${rows.map(activityRowHtml).join("")}</div>`
     : `<div class="km-empty"><div class="km-title">${esc(KUSDT_TEXT.historyEmpty)}</div><p class="muted small">${esc(KUSDT_TEXT.historyEmptyNote)}</p></div>`}
       </div>
-      <div class="ios-bottom-bar">
+      ${showsSendReceive ? `<div class="ios-bottom-bar">
         <button class="ios-capsule with-icon" id="kusdt-receive">${ICONS.qr}<span>Receive</span></button>
         <button class="ios-capsule with-icon" id="kusdt-send" ${h.units > 0n ? "" : "disabled"}>${KUSDT_ICONS.send}<span>Send</span></button>
-      </div>`, "kusdt-address");
+      </div>` : ""}`, "kusdt-address");
     $("#back").onclick = onBack;
-    $("#kusdt-receive").onclick = () => openKusdtReceive({ fixedHolding: h, onBack: back });
-    $("#kusdt-send").onclick = () => { if (h.units > 0n) openKusdtSend({ startFrom: h, onBack: back }); };
+    const receive = $("#kusdt-receive");
+    if (receive) receive.onclick = () => openKusdtReceive({ fixedHolding: h, onBack: back });
+    const send = $("#kusdt-send");
+    if (send) send.onclick = () => { if (h.units > 0n) openKusdtSend({ startFrom: h, onBack: back }); };
     $("#kusdt-page-options").onclick = () => showSheet({
       title: "Address Actions",
       cancel: false,

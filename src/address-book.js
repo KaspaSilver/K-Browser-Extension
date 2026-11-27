@@ -405,14 +405,14 @@ export function openEditor({ existing = null, address = "", name = "", onSaved =
     }, 350);
   };
   /** What "Use Their Username" fills in (K iOS domainSuggestion): the typed username that
-   *  resolved, in full ("alice.kachat", though screens show names bare - the book is shared with
-   *  K, whose domainSuggestion keeps the ending). The address's own .kachat name isn't
-   *  looked up: a saved address is never sent to a server here (EXT-011). */
+   *  resolved, bare, "alice", never "alice.kachat" (K iOS 824a30bb, K-Desktop 0dc7311, owner
+   *  2026-11-26: the ending is never shown, so it isn't saved into a contact's name either). The
+   *  address's own .kachat name isn't looked up: a saved address is never sent to a server here
+   *  (EXT-011). */
   const domainSuggestion = () => {
     const r = form.resolved;
     if (!r?.address || r.tld !== "kachat") return null;
-    const shown = String(r.domain || "");
-    return shown.toLowerCase().endsWith(`.${r.tld}`) ? shown : `${shown}.${r.tld}`;
+    return String(r.domain || "").trim().replace(/\.kachat$/i, "") || null;
   };
   // Save needs a name and an address (K iOS: disabled while the name is empty)
   const canSave = () => Boolean(form.name.trim()) && Boolean((form.resolved?.address || form.address).trim()) && !form.resolving;

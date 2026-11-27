@@ -54,9 +54,9 @@ check("Usernames: the marketplace's title and header, and the dock label", () =>
   assert.match(read("src/kachat-live.js"), /<span class="accent kachat-address-at">\$\{SYMBOLS\.at\}<\/span>\n\s+<div class="strong">No usernames on this address<\/div>/);
 });
 
-check("a typed name with or without the ending still resolves, and the Address Book keeps it in full", () => {
+check("a typed name with or without the ending still resolves; Use Their Username fills it in bare (K iOS 824a30bb)", () => {
   assert.match(read("src/names.js"), /endsWith\("\.kachat"\)\) return \{ label: trimmed\.slice\(0, -"\.kachat"\.length\), tld: "kachat" \}/);
-  assert.match(read("src/address-book.js"), /return shown\.toLowerCase\(\)\.endsWith\(`\.\$\{r\.tld\}`\) \? shown : `\$\{shown\}\.\$\{r\.tld\}`;/);
+  assert.match(read("src/address-book.js"), /return String\(r\.domain \|\| ""\)\.trim\(\)\.replace\(\/\\\.kachat\$\/i, ""\) \|\| null;/);
 });
 
 if (failures.length) {

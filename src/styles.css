@@ -674,9 +674,9 @@ body.tab #app[data-screen^="kachat-"], body.tab #app[data-screen^="kachat:"] { h
 
 /* --- Manage screens: 1:1 with iOS ChattingAddressManageView / ManageAddressesView ----------- */
 #app[data-screen="manage-chat"], #app[data-screen="manage-spending"], #app[data-screen="manage-list"],
-#app[data-screen="visibility"], #app[data-screen="coins"] { height: calc(600px - var(--dock-h, 0px)); min-height: 0; }
+#app[data-screen="visibility"], #app[data-screen="coins"], #app[data-screen="kusdt-manage"] { height: calc(600px - var(--dock-h, 0px)); min-height: 0; }
 body.tab #app[data-screen="manage-chat"], body.tab #app[data-screen="manage-spending"], body.tab #app[data-screen="manage-list"],
-body.tab #app[data-screen="visibility"], body.tab #app[data-screen="coins"] { height: calc(100vh - 48px - var(--dock-h, 0px)); }
+body.tab #app[data-screen="visibility"], body.tab #app[data-screen="coins"], body.tab #app[data-screen="kusdt-manage"] { height: calc(100vh - 48px - var(--dock-h, 0px)); }
 .manage-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 6px 16px 18px; }
 .manage-scroll > * { flex-shrink: 0; }
 .manage-scroll.flush { padding: 0; gap: 0; }
@@ -828,7 +828,7 @@ html:has(#app[data-screen="qr"]), body:has(#app[data-screen="qr"]) { background:
 /* Fixed-height screens: #app grows to fill the shell (flex: 1), which would let tall content
    override the height and push the dock away - these keep their height and scroll inside. */
 #app[data-screen^="kachat-"], #app[data-screen^="kachat:"], #app[data-screen="manage-chat"], #app[data-screen="manage-spending"], #app[data-screen="manage-list"],
-#app[data-screen="visibility"], #app[data-screen="coins"] { flex: none; }
+#app[data-screen="visibility"], #app[data-screen="coins"], #app[data-screen="kusdt-manage"] { flex: none; }
 /* The generic disabled-button grey must not repaint these. */
 .link-button:disabled { background: transparent !important; color: var(--muted) !important; }
 .ios-capsule:disabled { opacity: .5 !important; }
@@ -1294,6 +1294,43 @@ body.dock-on #app[data-screen="settings"] .form > * { flex-shrink: 0; }
 .bal-card-label { font-size: 15px; color: var(--muted); }
 .bal-card-amount { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
 .bal-card-detail { font-size: 15px; color: var(--muted); }
+.bal-card-address { margin-top: 6px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; line-height: 1.35; }
+
+/* Manage Addresses' and Manage kUSDT's cards (K iOS 824a30bb ManagedAddressCard, K-Desktop d1d0d07):
+   drawn like the Total Balance card. The name with its quantum tag and the ⋮, the balance large, its
+   worth, Used / Unused large, then Copy, Send, Receive, Rename, and Tap to View History. */
+.managed-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 18px; border-radius: 22px; cursor: pointer;
+  color: var(--text); text-align: left; outline: none;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--kaspa) 32%, var(--bg)), color-mix(in srgb, var(--kaspa) 8%, var(--bg)));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--kaspa) 35%, transparent);
+}
+.managed-card:focus-visible { box-shadow: inset 0 0 0 2px var(--kaspa); }
+.swipe-wrap:has(> .swipe-card > .managed-card) { border-radius: 22px; }
+/* the Total Balance card as wide as the address cards under it */
+#app[data-screen="manage-list"] .manage-scroll > .bal-card, #app[data-screen="kusdt-manage"] .manage-scroll > .bal-card { margin: 4px 0 0; }
+.ac-head { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
+.ac-name { font-size: 17px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ac-menu { margin-left: auto; color: var(--text); padding: 2px; }
+.ac-amount { font-size: 26px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; max-width: 100%; overflow-wrap: anywhere; }
+.ac-worth { font-size: 15px; color: var(--muted); }
+.ac-usage { margin-top: 2px; font-size: 17px; font-weight: 600; }
+.ac-usage.used { color: #ff9f0a; }
+.ac-usage.unused { color: #34c759; }
+.ac-usage.checking { color: var(--muted); }
+.quantum-tag { flex: 0 0 auto; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.quantum-tag.safe { color: #34c759; background: rgba(52, 199, 89, .15); }
+.quantum-tag.warn { color: #ff9f0a; background: rgba(255, 159, 10, .15); }
+.quantum-tag.plain { color: var(--muted); background: rgba(120, 120, 128, .2); }
+.ac-actions { display: flex; width: 100%; margin-top: 10px; }
+.ac-action { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
+.ac-action:disabled { opacity: .4; cursor: default; background: none !important; }
+.ac-action-circle { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--kaspa) 18%, transparent); color: var(--kaspa-ink); }
+.ac-action-circle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.ac-history { align-self: stretch; display: flex; justify-content: center; align-items: center; gap: 4px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--kaspa-ink); }
+.ac-history svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.managed-card .domain-tag { margin-top: 2px; }
+.managed-card .ac-extra { font-size: 13px; color: var(--muted); }
 
 /* Connection Settings, Your Domains and Address Visibility as cards (KaPay iOS e188209 / 3d126db):
    an accent icon in a circle, the title, a one-line summary, a chevron. */

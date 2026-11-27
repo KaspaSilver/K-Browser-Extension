@@ -2,9 +2,11 @@
 //
 //   ChattingAddressManageView   Balance, History | UTXOs | Usernames on the cycle button,
 //                               Receive / Send; the options button opens Address Actions
-//   ManageAddressesView         Total Balance, Address Actions (Generate, Discover, Address
-//                               Visibility), one card per spending address with its own actions
-//                               sheet (Rename, Copy, Show QR Code, Set as Primary, Hide)
+//   ManageAddressesView         Total Balance, Discover Addresses and Address Visibility at the top
+//                               right, the floating + (Regular or Quantum-Protected Address), and
+//                               one card per address (K iOS 824a30bb ManagedAddressCard): Copy,
+//                               Send, Receive, Rename, Tap to View History; the ⋮ keeps Send to
+//                               Chatting Address and Hide
 //   SpendingAddressTransactionHistoryView   one spending address: History | UTXOs | Usernames
 //                               (K iOS 518fdc8c: .kachat names only),
 //                               Receive / Send; the options button opens Address Actions
@@ -87,6 +89,55 @@ export function quantumShieldHtml(row) {
     : '<span class="q-shield q-safe" role="img" aria-label="Quantum-safe" title="Quantum-safe">' + SHIELD + "</span>";
 }
 
+// --- The address card (K iOS 824a30bb ManagedAddressCard, owner 2026-11-26; K-Desktop d1d0d07) ---
+// Drawn like the Total Balance card: the name with its Quantum Protected / Not Quantum Protected tag
+// (none for kUSDT) and the ⋮, the balance large, its worth, Used / Unused large, then Copy, Send,
+// Receive and Rename (no Rename on the Chatting Address), and "Tap to View History". The address
+// itself isn't on the card: its history page shows it in full. Manage kUSDT draws the same card.
+
+/** The quantum tag (K QuantumProtectionTag): green on a quantum address that never spent; orange on
+ *  one whose key a spend revealed while funds sit on it; gray otherwise (a regular address too). */
+export function quantumTagHtml({ quantum = false, spent = false, funded = false } = {}) {
+  const protectedNow = quantum && !spent;
+  const tone = protectedNow ? "safe" : quantum && spent && funded ? "warn" : "plain";
+  return `<span class="quantum-tag ${tone}">${protectedNow ? "Quantum Protected" : "Not Quantum Protected"}</span>`;
+}
+
+const CARD_ICONS = {
+  copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+  send: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+  receive: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
+  rename: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.9 4.5a2.1 2.1 0 0 1 3 3L8.5 18.9 4 20l1.1-4.5Z"/></svg>',
+};
+const CHEVRON_SMALL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+
+/**
+ * One address's card.
+ * @param {object} o
+ * @param {string} o.attrs       the card's own attributes (what a click on it opens)
+ * @param {string} o.name
+ * @param {string} [o.tagHtml]   the quantum tag
+ * @param {string} [o.menuAttr]  the ⋮'s attribute, when it has one
+ * @param {string} o.amountHtml  the balance (escaped already)
+ * @param {string} [o.worth]     its worth in your currency
+ * @param {boolean|null|"checking"} [o.used]  Used / Unused, Checking while unknown
+ * @param {string} [o.extraHtml] under Used: Contains username, KAS held with it
+ * @param {{action:string,title:string,icon:string,disabled?:boolean}[]} o.buttons
+ */
+export function managedAddressCardHtml({ attrs, name, tagHtml = "", menuAttr = null, amountHtml, worth = "", used = null, extraHtml = "", buttons }) {
+  const usage = used === true ? '<span class="ac-usage used">Used</span>' : used === false ? '<span class="ac-usage unused">Unused</span>' : '<span class="ac-usage checking">Checking</span>';
+  return `
+    <div class="managed-card" ${attrs} role="button" tabindex="0">
+      <div class="ac-head"><span class="ac-name">${esc(name)}</span>${tagHtml}${menuAttr ? `<button type="button" class="icon plain ac-menu" ${menuAttr} aria-label="More for ${esc(name)}">${SF.ellipsisV}</button>` : ""}</div>
+      <div class="ac-amount">${amountHtml}</div>
+      ${worth ? `<div class="ac-worth">${esc(worth)}</div>` : ""}
+      ${usage}
+      ${extraHtml}
+      <div class="ac-actions">${buttons.map((b) => `<button type="button" class="ac-action" data-card-action="${esc(b.action)}"${b.disabled ? " disabled" : ""}><span class="ac-action-circle">${CARD_ICONS[b.icon]}</span><span>${esc(b.title)}</span></button>`).join("")}</div>
+      <div class="ac-history">Tap to View History${CHEVRON_SMALL}</div>
+    </div>`;
+}
+
 // SF Symbols these screens use, drawn to match.
 // shield.fill / circle.grid.2x2.fill: Address Visibility's two chains
 const SHIELD_FILL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.5v6c0 4.8 3.2 8.9 7.5 10 4.3-1.1 7.5-5.2 7.5-10v-6Z" fill="currentColor"/></svg>';
@@ -115,6 +166,11 @@ const SF = {
   qrcode: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM17 17h4v4M21 14v1"/></svg>',
   plusCircle: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 7.5v9M7.5 12h9"/></svg>',
   magnifier: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>',
+  // arrow.clockwise / checklist (the top right's Discover Addresses and Address Visibility) and the
+  // floating + (K iOS 824a30bb)
+  discover: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>',
+  checklistSmall: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 6 1.6 1.6L8 4.8M3.5 12l1.6 1.6L8 10.8M3.5 18l1.6 1.6L8 16.8M11 6.2h9.5M11 12.2h9.5M11 18.2h9.5"/></svg>',
+  plus: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   checklist: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5l1.8 1.8L8.5 5M3.5 13.5l1.8 1.8 3.2-3.3M11.5 7h9M11.5 14h9M11.5 20h9"/></svg>',
   doc: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2.5"/><path d="M16 8V5.5A2.5 2.5 0 0 0 13.5 3h-8A2.5 2.5 0 0 0 3 5.5v8A2.5 2.5 0 0 0 5.5 16H8"/></svg>',
   star: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9L12 3z"/></svg>',
@@ -486,9 +542,12 @@ export function showAddressActions({ address, onViewPrivateKey = null, onViewPub
  * @param {string} opts.address        the chatting address
  * @param {Function} opts.onBack
  * @param {Function} [opts.onChangeIdentity] imported accounts: Change Chatting Address
+ * @param {boolean} [opts.showsSendReceive] false from Manage Addresses, whose card has them (K iOS
+ *                                    824a30bb); a notification's page keeps them
  */
 export function showManageAddress(opts) {
   const source = { kind: "main" };
+  const showsSendReceive = opts.showsSendReceive !== false;
   const state = { tab: "history", history: null, historyLoading: false, coins: null, coinsLoading: false, coinsError: "", labels: {}, address: opts.address };
   const back = () => paint();
   const here = () => app.dataset.screen === "manage-chat";
@@ -529,14 +588,14 @@ export function showManageAddress(opts) {
         ${addressOptionsButtonHtml()}
       </header>
       <div class="manage-scroll">
-        ${unreadable ? unreadableBalanceHtml() : balanceCardHtml({ label: "Chatting Address", sompi: total, fiatText: fiatTextFor(total, repaintIfHere) })}
+        ${unreadable ? unreadableBalanceHtml() : balanceCardHtml({ label: "Chatting Address", sompi: total, fiatText: fiatTextFor(total, repaintIfHere), address: opts.address })}
         ${addressTabsHtml(state.tab)}
         ${addressTabContent(state, "Combines all UTXOs at this address into a single one, to reduce the number of inputs a future send needs.")}
       </div>
-      <div class="ios-bottom-bar">
+      ${showsSendReceive ? `<div class="ios-bottom-bar">
         <button class="ios-capsule with-icon" id="receive">${SF.qrcode}<span>Receive</span></button>
         <button class="ios-capsule with-icon" id="send" ${total === 0n || unreadable ? "disabled" : ""}>${SF.sendFill}<span>Send</span></button>
-      </div>`, "manage-chat");
+      </div>` : ""}`, "manage-chat");
     bindKachatTab(state, back);
     remember(() => paint());
     const scroller = app.querySelector(".manage-scroll");
@@ -544,11 +603,13 @@ export function showManageAddress(opts) {
     $("#back").onclick = opts.onBack;
     for (const tab of app.querySelectorAll("[data-tab]")) tab.onclick = () => { state.tab = tab.dataset.tab; paint(); };
     $("#address-options").onclick = addressActions;
-    $("#receive").onclick = () => showQr({
+    const receive = $("#receive");
+    if (receive) receive.onclick = () => showQr({
       heading: "Chatting Address", address: opts.address, balanceSompi: total, backLabel: "Close", onBack: back,
       privacy: RECEIVE_NOTES.chatting, notes: [RECEIVE_NOTES.kaspaAndKusdt, RECEIVE_NOTES.chattingUse],
     });
-    $("#send").onclick = () => openSend(false);
+    const send = $("#send");
+    if (send) send.onclick = () => openSend(false);
     const balanceRetry = $("#balance-retry");
     if (balanceRetry) balanceRetry.onclick = loadCoins;
     bindTabsContent(state, { address: opts.address, repaint: paint, reloadHistory: loadHistory, reloadCoins: loadCoins, onCompound: () => openSend(true) });
@@ -680,23 +741,19 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     if (here()) paint();
   };
 
-  const usedBadge = (row) => {
+  const usedOf = (row) => {
     const used = row.balanceSompi > 0n ? true : state.used.get(row.address);
-    if (used === true) return '<span class="used-badge used">Used</span>';
-    if (used === false) return '<span class="used-badge unused">Unused</span>';
-    return '<span class="used-badge">Checking</span>';
+    return used === true || used === false ? used : null;
   };
 
+  // The ⋮ keeps Send to Chatting Address and Hide (K iOS 824a30bb): Copy, Send, Receive and Rename
+  // are the card's buttons.
   const rowActions = (row) => {
-    const hideable = true;
     showSheet({
-      title: row.customLabel || `Address ${row.index}`,
+      title: displayLabel(row),
       subtitle: shortAddress(row.address),
       cancel: false,
       rows: [
-        { label: "Rename Address", subtitle: "Gives this address a label of your own.", icon: SF.pencil, onClick: () => renameAddress(row) },
-        { label: "Copy Address", subtitle: "Puts the full address on the clipboard.", icon: SF.doc, onClick: () => copyText(row.address) },
-        { label: "Show QR Code", subtitle: "Full screen, for scanning with another device.", icon: SF.qrcode, onClick: () => spendingReceive({ label: row.customLabel || `Address #${row.index}`, address: row.address, index: row.index, onBack: back }) },
         // Send Kaspa from this address with the Chatting Address already the recipient (KaPay iOS
         // 17bda71); nothing to send from an empty one
         ...(state.chatting?.address ? [{
@@ -708,9 +765,30 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
             onClose: () => back(),
           }),
         }] : []),
-        ...(hideable ? [{ label: "Hide Address", subtitle: "Removes it from this list. Re-enable it in Address Visibility.", icon: SF.eyeSlash, tint: "orange", onClick: () => hideAddress(row) }] : []),
+        { label: "Hide Address", subtitle: "Removes it from this list. Re-enable it in Address Visibility.", icon: SF.eyeSlash, tint: "orange", onClick: () => hideAddress(row) },
       ],
     });
+  };
+  /** A card's own buttons: Copy, Send, Receive, Rename. */
+  const cardAction = (row, action) => {
+    if (action === "copy") copyText(row.address);
+    else if (action === "send" && row.balanceSompi > 0n) {
+      showSend({ source: { kind: "spending", index: row.index }, fromAddress: row.address, lockedSource: true, navTitle: "Send Kaspa", onClose: () => back() });
+    } else if (action === "receive") spendingReceive({ label: displayLabel(row), address: row.address, index: row.index, onBack: back });
+    else if (action === "rename") renameAddress(row);
+  };
+  const chattingAction = (action) => {
+    const address = state.chatting?.address;
+    if (!address) return;
+    if (action === "copy") copyText(address);
+    else if (action === "send" && state.chatting.balance > 0n) {
+      showSend({ source: { kind: "main" }, fromAddress: address, lockedSource: true, navTitle: "Send Kaspa", onClose: () => back() });
+    } else if (action === "receive") {
+      showQr({
+        heading: "Chatting Address", address, balanceSompi: state.chatting.balance, backLabel: "Close", onBack: back,
+        privacy: RECEIVE_NOTES.chatting, notes: [RECEIVE_NOTES.kaspaAndKusdt, RECEIVE_NOTES.chattingUse],
+      });
+    }
   };
 
   const renameAddress = (row) => showAlert({
@@ -725,14 +803,6 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     },
   });
 
-  const setPrimary = async (row) => {
-    state.busy = { primary: row.index };
-    paint();
-    try { await wallet.setPrimarySpending(row.index); } catch (error) { toast(error.message); }
-    state.busy = null;
-    load();
-  };
-
   const hideAddress = async (row) => {
     if (refuseHidingKusdtListed(row.index)) { paint(); return; }
     try {
@@ -745,17 +815,18 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     }
   };
 
-  const actionRows = () => {
-    const discovering = Boolean(state.discovery);
-    const busy = Boolean(state.busy?.startsWith?.("generate"));
-    return [
-      // a regular address is what Receive gives; a quantum-resistant one is made only on purpose
-      // (KaPay iOS e188209)
-      { label: "Generate Non-Quantum Address", subtitle: "A regular address, like Receive gives you. Works with everything, kUSDT included.", icon: SF.plusCircle, busy: state.busy === "generate-regular", disabled: discovering || busy, onClick: () => generate({ quantum: false }) },
-      { label: "Generate Quantum-Resistant Address", subtitle: "Keeps its key hidden until it spends. For Kaspa only: kUSDT can't be traded from it.", icon: SF.shield, busy: state.busy === "generate-quantum", disabled: discovering || busy, onClick: () => generate({ quantum: true }) },
-      { label: "Discover Addresses", subtitle: "Finds addresses holding a balance or a username.", icon: SF.magnifier, disabled: discovering, keepOpen: true, onClick: discover },
-      { label: "Address Visibility", subtitle: "Check off every address you want on the list, in one sitting.", icon: SF.checklist, disabled: discovering, onClick: () => showVisibility({ onBack: back }) },
-    ];
+  // The floating + (K iOS 824a30bb, owner 2026-11-26: the Address Actions sheet is gone): a Regular
+  // or a Quantum-Protected address, saying kUSDT can't use a quantum one. Address Visibility and
+  // Discover Addresses are the buttons at the top right.
+  const openNewAddress = () => {
+    showSheet({
+      title: "New Address",
+      cancel: false,
+      rows: [
+        { label: "Regular Address", subtitle: "Like Receive gives you. Works with everything, kUSDT included.", icon: SF.plusCircle, onClick: () => generate({ quantum: false }) },
+        { label: "Quantum-Protected Address", subtitle: "Keeps its key hidden until it spends. kUSDT can't be sent to or received on it.", icon: SF.shield, onClick: () => generate({ quantum: true }) },
+      ],
+    });
   };
 
   const discoveryHtml = () => {
@@ -770,19 +841,16 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
         <button class="sheet-row center-text" id="keep-scanning"><span class="sheet-label">Close and Keep Scanning</span></button>
       </div>`;
   };
-
-  const openActions = () => {
-    actionsSheet = showSheet({
-      title: "Address Actions",
-      cancel: false,
-      rows: state.discovery ? [] : actionRows(),
-      footerHtml: discoveryHtml(),
-    });
+  // Discover Addresses at the top right (K iOS pulls the list down for it): the scan, its progress
+  // in a sheet that closing doesn't stop.
+  const openDiscover = () => {
+    actionsSheet = showSheet({ title: "Discover Addresses", subtitle: "Finds addresses holding a balance or a username.", cancel: false, rows: [], footerHtml: discoveryHtml() });
     bindKeepScanning();
+    if (!state.discovery) discover();
   };
   const refreshActions = () => {
     if (!actionsSheet?.isOpen()) return;
-    actionsSheet.update({ rows: state.discovery ? [] : actionRows(), footerHtml: discoveryHtml() });
+    actionsSheet.update({ rows: [], footerHtml: discoveryHtml() });
     bindKeepScanning();
   };
   const bindKeepScanning = () => {
@@ -818,7 +886,7 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
       message = error.message;
     }
     state.discovery = null;
-    // Sheet still open: the result shows under the rows. Closed: it arrives as a toast.
+    // Sheet still open: the result shows in it. Closed: it arrives as a toast.
     if (actionsSheet?.isOpen()) { state.summary = message; refreshActions(); } else toast(message);
     load();
   }
@@ -829,59 +897,86 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     const total = (state.list?.rows || []).reduce((sum, r) => sum + r.balanceSompi, 0n) + BigInt(state.chatting?.balance ?? 0n);
     // the chatting address's balance couldn't be read: no total to show (a dash, never a short one)
     const chattingUnread = Boolean(state.chatting) && state.chatting.balance == null;
-    const chattingCard = state.chatting ? `
-          <div class="glass address-card" id="open-chatting" role="button" tabindex="0">
-            <div class="address-card-main">
-              <span class="muted small medium">Chatting Address</span>
-              <span class="mono small">${esc(shortAddress(state.chatting.address))}</span>
-              ${chattingUnread
-                ? '<span class="muted small">Couldn\'t load the coins at this address</span>'
-                : `<span class="strong small">${esc(groupedKas8(state.chatting.balance))} KAS</span>`}
-              ${state.used.get(state.chatting.address) === true || domainOwners.get(state.chatting.address) ? `<span class="address-status">${state.used.get(state.chatting.address) === true ? '<span class="used-badge used">Used</span>' : ""}${domainOwners.get(state.chatting.address) ? '<span class="domain-tag">Contains username</span>' : ""}</span>` : ""}
-            </div>
-          </div>` : "";
+    const repaint = () => { if (here()) paint(); };
+    const contains = (address) => (domainOwners.get(address) ? '<span class="domain-tag">Contains username</span>' : "");
+    const chattingCard = state.chatting ? managedAddressCardHtml({
+      attrs: 'id="open-chatting"',
+      name: "Chatting Address",
+      tagHtml: quantumTagHtml(),
+      amountHtml: chattingUnread ? '<span class="muted small">Couldn\'t load the coins at this address</span>' : `${esc(groupedKas8(state.chatting.balance))} KAS`,
+      worth: chattingUnread ? "" : fiatTextFor(state.chatting.balance, repaint),
+      used: state.used.get(state.chatting.address) === true ? true : state.used.get(state.chatting.address) === false ? false : null,
+      extraHtml: contains(state.chatting.address),
+      buttons: [
+        { action: "copy", icon: "copy", title: "Copy" },
+        { action: "send", icon: "send", title: "Send", disabled: !(state.chatting.balance > 0n) },
+        { action: "receive", icon: "receive", title: "Receive" },
+      ],
+    }) : "";
     const busy = Boolean(state.discovery) || Boolean(state.busy?.startsWith?.("generate"));
     const scroll = app.querySelector(".manage-scroll")?.scrollTop || 0;
     render(`
-      ${navHeader({ title: "Manage Addresses" })}
+      <header class="navbar">
+        <button class="nav-back" id="back" aria-label="Back">${ICONS.back}<span>Back</span></button>
+        <div class="nav-title">Manage Addresses</div>
+        <div class="nav-right bar-circles">
+          <button class="bar-circle" id="discover" aria-label="Discover Addresses" title="Discover Addresses">${state.discovery ? '<span class="spinner small-spin"></span>' : SF.discover}</button>
+          <button class="bar-circle" id="visibility" aria-label="Address Visibility" title="Address Visibility" ${state.discovery ? "disabled" : ""}>${SF.checklistSmall}</button>
+        </div>
+      </header>
       <div class="manage-scroll">
         ${balanceCardHtml({
           label: "Total Balance",
           sompi: state.list ? total : null,
           unknown: (!state.list && Boolean(state.error)) || (Boolean(state.list) && chattingUnread),
-          fiatText: state.list && !chattingUnread ? fiatTextFor(total, () => { if (here()) paint(); }) : "",
+          fiatText: state.list && !chattingUnread ? fiatTextFor(total, repaint) : "",
         })}
         ${state.error ? `<p class="error">${esc(state.error)}</p>` : ""}
         ${state.loading && !state.list ? '<div class="center-text"><span class="spinner"></span></div>' : ""}
         ${chattingCard}
         ${state.list && !rows.length ? `
           <div class="km-empty"><span class="muted">${SF.creditcard}</span><div class="km-title">No Spending Addresses</div>
-          <p class="muted small">Generate one below to start sending payments from a separate address than the one you chat from.</p></div>` : ""}
+          <p class="muted small">Add one with + to start sending payments from a separate address than the one you chat from.</p></div>` : ""}
         ${rows.map((row) => `
           <div class="swipe-wrap" data-swipe="${row.index}">
             <button class="swipe-hide" tabindex="-1" aria-label="Hide Address">${SF.eyeSlashFill}<span>Hide</span></button>
-            <div class="glass address-card swipe-card" data-open="${row.index}" role="button" tabindex="0">
-              <div class="address-card-main">
-                <span class="muted small medium">${esc(displayLabel(row))}${quantumShieldHtml(row)}</span>
-                <span class="mono small">${esc(shortAddress(row.address))}</span>
-                <span class="strong small">${esc(groupedKas8(row.balanceSompi))} KAS</span>
-                <span class="address-status">${usedBadge(row)}${domainOwners.get(row.address) ? '<span class="domain-tag">Contains username</span>' : ""}</span>
-              </div>
-              ${state.busy?.primary === row.index
-                ? '<span class="spinner small-spin"></span>'
-                : `<button class="icon plain card-menu" data-menu="${row.index}" aria-label="More" ${state.busy?.primary != null ? "disabled" : ""}>${SF.ellipsisV}</button>`}
-            </div>
+            <div class="swipe-card">${managedAddressCardHtml({
+              attrs: `data-open="${row.index}"`,
+              name: displayLabel(row),
+              tagHtml: quantumTagHtml({ quantum: row.quantum, spent: row.spent, funded: row.balanceSompi > 0n }),
+              menuAttr: `data-menu="${row.index}"`,
+              amountHtml: `${esc(groupedKas8(row.balanceSompi))} KAS`,
+              worth: fiatTextFor(row.balanceSompi, repaint),
+              used: usedOf(row),
+              extraHtml: contains(row.address),
+              buttons: [
+                { action: "copy", icon: "copy", title: "Copy" },
+                { action: "send", icon: "send", title: "Send", disabled: !(row.balanceSompi > 0n) },
+                { action: "receive", icon: "receive", title: "Receive" },
+                { action: "rename", icon: "rename", title: "Rename" },
+              ],
+            })}</div>
           </div>`).join("")}
         <div class="fab-room"></div>
       </div>
-      ${addressActionsFabHtml(busy)}`, "manage-list");
+      <button class="fab" id="new-address" aria-label="New Address" title="New Address" ${busy ? "disabled" : ""}>${busy ? '<span class="spinner small-spin"></span>' : SF.plus}</button>`, "manage-list");
     remember(() => paint());
     const scroller = app.querySelector(".manage-scroll");
     if (scroller) scroller.scrollTop = scroll;
     $("#back").onclick = onBack;
-    $("#address-actions").onclick = openActions;
+    $("#new-address").onclick = openNewAddress;
+    $("#discover").onclick = openDiscover;
+    $("#visibility").onclick = () => { if (!state.discovery) showVisibility({ onBack: back }); };
     const chattingEl = $("#open-chatting");
-    if (chattingEl) chattingEl.onclick = () => showManageAddress({ address: state.chatting.address, onBack: back, onChangeIdentity });
+    if (chattingEl) {
+      chattingEl.onclick = (event) => {
+        const button = event.target.closest("[data-card-action]");
+        if (button) { if (!button.disabled) chattingAction(button.dataset.cardAction); return; }
+        // its Send and Receive are on this card (K iOS 824a30bb)
+        showManageAddress({ address: state.chatting.address, onBack: back, onChangeIdentity, showsSendReceive: false });
+      };
+      chattingEl.onkeydown = (event) => { if (event.key === "Enter" && event.target === chattingEl) chattingEl.click(); };
+    }
     const byIndex = (index) => state.list.rows.find((r) => r.index === Number(index));
     const swipes = new Map();
     for (const wrap of app.querySelectorAll("[data-swipe]")) {
@@ -889,13 +984,15 @@ export function showManageAddresses({ onBack, onChangeIdentity = null }) {
     }
     for (const card of app.querySelectorAll("[data-open]")) {
       card.onclick = (event) => {
-        if (event.target.closest("[data-menu]")) return;
         if (swipes.get(card.dataset.open)?.wasSwiped()) return;
-        showSpendingAddress({ row: byIndex(card.dataset.open), onBack: back });
+        const row = byIndex(card.dataset.open);
+        if (event.target.closest("[data-menu]")) { rowActions(row); return; }
+        const button = event.target.closest("[data-card-action]");
+        if (button) { if (!button.disabled) cardAction(row, button.dataset.cardAction); return; }
+        showSpendingAddress({ row, onBack: back });
       };
-      card.onkeydown = (event) => { if (event.key === "Enter") card.click(); };
+      card.onkeydown = (event) => { if (event.key === "Enter" && event.target === card) card.click(); };
     }
-    for (const button of app.querySelectorAll("[data-menu]")) button.onclick = () => rowActions(byIndex(button.dataset.menu));
   }
 
   paint();
@@ -918,11 +1015,12 @@ export async function openSpendingAddress(address, onBack) {
     $("#balance-retry").onclick = () => openSpendingAddress(address, onBack);
     return;
   }
-  if (row) showSpendingAddress({ row, onBack });
+  // a notification's page keeps Send / Receive (K iOS 824a30bb showsSendReceive)
+  if (row) showSpendingAddress({ row, onBack, showsSendReceive: true });
   else showManageAddresses({ onBack });
 }
 
-function showSpendingAddress({ row, onBack }) {
+function showSpendingAddress({ row, onBack, showsSendReceive = false }) {
   const source = { kind: "spending", index: row.index };
   const title = row.label;
   const state = {
@@ -951,14 +1049,14 @@ function showSpendingAddress({ row, onBack }) {
         ${addressOptionsButtonHtml()}
       </header>
       <div class="manage-scroll">
-        ${balanceCardHtml({ label: title, sompi: row.balanceSompi, fiatText: fiatTextFor(row.balanceSompi, repaintIfHere) })}
+        ${balanceCardHtml({ label: title, sompi: row.balanceSompi, fiatText: fiatTextFor(row.balanceSompi, repaintIfHere), address: row.address })}
         ${addressTabsHtml(state.tab)}
         ${addressTabContent(state, "Combines this address's UTXOs to reduce the inputs a future send needs. A single transaction can only merge so many at once, so if this address has a very large number, tap Compound again after it confirms to keep reducing.")}
       </div>
-      <div class="ios-bottom-bar">
+      ${showsSendReceive ? `<div class="ios-bottom-bar">
         <button class="ios-capsule with-icon" id="receive">${SF.qrcode}<span>Receive</span></button>
         <button class="ios-capsule with-icon" id="send" ${row.balanceSompi === 0n ? "disabled" : ""}>${SF.sendFill}<span>Send</span></button>
-      </div>`, "manage-spending");
+      </div>` : ""}`, "manage-spending");
     bindKachatTab(state, back);
     remember(() => paint());
     const scroller = app.querySelector(".manage-scroll");
@@ -971,8 +1069,10 @@ function showSpendingAddress({ row, onBack }) {
       onViewPublicKey: wallet.isQuantumIndex(row.index) ? null : () => showPublicKey({ source, address: row.address, onBack: back }),
     });
     for (const tab of app.querySelectorAll("[data-tab]")) tab.onclick = () => { state.tab = tab.dataset.tab; paint(); };
-    $("#receive").onclick = () => spendingReceive({ label: title, address: row.address, index: row.index, onBack: back });
-    $("#send").onclick = () => openSend(false);
+    const receive = $("#receive");
+    if (receive) receive.onclick = () => spendingReceive({ label: title, address: row.address, index: row.index, onBack: back });
+    const send = $("#send");
+    if (send) send.onclick = () => openSend(false);
     bindTabsContent(state, { address: row.address, repaint: paint, reloadHistory: loadHistory, reloadCoins: loadCoins, onCompound: () => openSend(true) });
   }
 

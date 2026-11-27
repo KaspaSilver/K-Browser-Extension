@@ -479,14 +479,17 @@ export function groupedKas8(sompi) {
  * under it what it's worth (mainnet only, once a price is known). `sompi` null shows a spinner.
  * `fiatText`: the worth, already formatted ("" for none).
  */
-export function balanceCardHtml({ label, sompi, fiatText = "", unknown = false }) {
+export function balanceCardHtml({ label, sompi, fiatText = "", unknown = false, address = "" }) {
   // `unknown`: it couldn't be read - a dash, never 0 KAS
   const amount = unknown ? '<span class="muted">—</span>' : sompi == null ? '<span class="spinner small-spin"></span>' : `${esc(groupedKas8(sompi))} KAS`;
+  // `address`: an address's history page shows it in full on its card (K iOS 824a30bb: it isn't on
+  // Manage Addresses' card)
   return `
     <div class="bal-card">
       <div class="bal-card-label">${esc(label)}</div>
       <div class="bal-card-amount">${amount}</div>
       ${fiatText ? `<div class="bal-card-detail">${esc(fiatText)}</div>` : ""}
+      ${address ? `<div class="bal-card-address mono selectable">${esc(address)}</div>` : ""}
     </div>`;
 }
 
