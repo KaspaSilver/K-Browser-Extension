@@ -17,9 +17,10 @@ export function groupedAmountText(plain) { return groupWith(plain, { commaDecima
 function ungroupedAmountText(edited, previous) { return ungroupWith(edited, previous, { commaDecimal }); }
 
 // The send screens' amount (Send Kaspa, a spending address's Send, KasSigner's send), the .kachat
-// offer and list price, and Add to Portfolio / a portfolio transaction's quantity. The portfolio
-// converter keeps its own formatting, as on iOS. (From KaChat-Desktop ui/grouped-amount.js.)
-const SELECTOR = ".sk-amount-input, #kl-offer-amount, #kl-price, #pf-ed-qty, #pf-atp-amount";
+// offer and list price, Add to Portfolio / a portfolio transaction's quantity, and Buy/Sell's You
+// Pay / You Get (K iOS 824a30bb: both amounts group thousands as you type). The portfolio converter
+// keeps its own formatting, as on iOS. (From KaChat-Desktop ui/grouped-amount.js.)
+const SELECTOR = ".sk-amount-input, #kl-offer-amount, #kl-price, #pf-ed-qty, #pf-atp-amount, .swap-amount";
 
 const native = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
 const wrapped = new WeakSet();
@@ -65,6 +66,10 @@ function scan(node) {
   if (node.matches(SELECTOR)) attach(node);
   for (const input of node.querySelectorAll(SELECTOR)) attach(input);
 }
+
+/** Wraps the amount fields under `root` now, before the observer below gets to them: a screen that
+ *  redraws its field on every keystroke (Buy/Sell) puts the caret back in the grouped text. */
+export function groupAmountInputsIn(root) { scan(root); }
 
 /** Wraps every amount field now on the page and each one added later. */
 export function installGroupedAmountInputs(root = document.documentElement) {

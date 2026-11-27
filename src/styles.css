@@ -1147,15 +1147,12 @@ button.kl-tile:not(:disabled), .kl-tile-split { cursor: pointer; }
 .swap-amount { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--text); font-size: 24px; font-weight: 700; outline: none; font-variant-numeric: tabular-nums; }
 .swap-quoting { flex: 1; display: flex; align-items: center; min-height: 34px; }
 .swap-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--panel-2); color: var(--text); font-size: 13px; font-weight: 600; white-space: nowrap; flex: 0 0 auto; }
-.swap-badge.pickable { cursor: pointer; }
 .swap-coin-icon { width: 22px; height: 22px; border-radius: 50%; object-fit: contain; flex: 0 0 auto; }
 .swap-coin-text { display: inline-flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 800; background: var(--panel); }
-.swap-actions-row { display: flex; align-items: center; gap: 10px; }
-.swap-go { flex: 1; }
 .swap-payout { width: 100%; box-sizing: border-box; background: transparent; border: 0; color: var(--text); font: inherit; outline: none; }
 .swap-result { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
 .swap-qr-button { padding: 8px; background: #fff; border-radius: 12px; }
-.swap-qr { display: block; width: 160px; height: 160px; }
+.swap-qr { display: block; width: 180px !important; height: 180px !important; image-rendering: pixelated; }
 .swap-mono { background: transparent; color: var(--text); word-break: break-all; text-align: center; padding: 2px 0; }
 .swap-links { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; }
 .swap-powered { display: block; margin-top: 4px; }
@@ -1178,11 +1175,35 @@ button.kl-tile:not(:disabled), .kl-tile-split { cursor: pointer; }
 .swap-approval-card { display: flex; flex-direction: column; gap: 8px; }
 .swap-approval-card hr { border: 0; border-top: .8px solid var(--line); margin: 2px 0; width: 100%; }
 .swap-approval .sk-from-row > :last-child { text-align: right; }
-.swap-coins { display: flex; flex-direction: column; margin-top: 10px; }
-.swap-coin-row { display: flex; align-items: center; gap: 10px; padding: 11px 6px; background: transparent; color: var(--text); border-bottom: 1px solid var(--hairline, rgba(255,255,255,.06)); text-align: left; border-radius: 0; }
-.swap-coin-row.indented { padding-left: 34px; }
-.swap-coin-name { flex: 1; font-size: 14px; }
 .swap-details { display: flex; flex-direction: column; gap: 8px; }
+/* Buy/Sell's steps (K iOS 824a30bb, K-Desktop 32c457c): the coin, where the Kaspa lands, the order,
+   the deposit, done. The bar's Back carries its chevron. */
+.panel-bar [data-swap-back] { display: inline-flex; align-items: center; gap: 2px; padding-left: 2px; }
+.panel-bar [data-swap-back] svg { width: 16px; height: 16px; }
+.swap-step { display: flex; flex-direction: column; gap: 10px; }
+.swap-choice-list { display: flex; flex-direction: column; gap: 8px; }
+.swap-choice-row { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; color: var(--text); text-align: left; }
+.swap-choice-row.indented { margin-left: 22px; }
+.swap-choice-row .swap-coin-icon { width: 30px; height: 30px; }
+.swap-choice-copy { flex: 1; min-width: 0; }
+.swap-choice-chevron { display: inline-flex; transition: transform .15s ease; }
+.swap-choice-chevron.open { transform: rotate(180deg); }
+.swap-dest-fresh { display: flex; flex-direction: column; gap: 8px; }
+.swap-dest-fresh p { margin: 0; line-height: 1.4; }
+.swap-go { width: 100%; margin-top: 4px; }
+.swap-deposit { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.swap-deposit-head { display: flex; flex-direction: column; gap: 2px; }
+.swap-deposit-head .strong { font-size: 20px; }
+.swap-deposit .swap-qr-button { align-self: center; }
+.swap-deposit-status { flex-direction: row; align-items: center; gap: 12px; }
+.swap-deposit-status.problem { border: .8px solid rgba(255, 159, 10, .5); }
+.swap-deposit-card { align-items: flex-start; gap: 4px; }
+.swap-deposit-card .swap-mono { text-align: left; }
+.swap-deposit-card .bar-text { padding-left: 0; }
+.swap-finish { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 8px; text-align: center; }
+.swap-finish .strong { font-size: 20px; }
+.swap-finish p { margin: 0; line-height: 1.45; }
+.swap-finish .big, .swap-finish .ghost { width: 100%; }
 .pad-x { padding: 0 14px; }
 
 /* --- KaPay iOS shell (64b5f53 ... 5bab351) ---------------------------------------------------- */

@@ -155,7 +155,7 @@ await check("the extension's Swap: Approve armed late and never while blocked, c
   assert.match(swaps, /open\.timer = setTimeout\(\(\) => \{ if \(approval === open && !approvalBlocked\(p\)\) button\.disabled = false; \}, APPROVE_ARM_MS\);/);
   assert.match(swaps, /<button class="big" data-swap-approve disabled>Approve<\/button>/);
   assert.match(swaps, /onClose: \(\) => answerApproval\(false\)/);
-  assert.match(swaps, /onClose: \(\) => \{ clearTimeout\(estimateTimer\); answerApproval\(false\); \}/, "closing Swap declines");
+  assert.match(swaps, /onClose: \(\) => \{ clearTimeout\(estimateTimer\); clearTimeout\(depositTimer\); depositTimer = null; document\.removeEventListener\("visibilitychange", onVisibility\); answerApproval\(false\); \}/, "closing Buy/Sell declines");
   const glue = read("src/swap-kusdt.js");
   assert.match(glue, /const key = unlocked;\n\s+unlocked = null;\n\s+return key && key\.address === target\?\.address \? key\.hex : null;/, "once, for that address only");
   assert.match(glue, /\} finally \{\n\s+unlocked = null;/, "dropped whatever happens");
@@ -197,10 +197,10 @@ await check("comma decimals: \"1,5\" is 1.5, never 15, for ChangeNOW and both kU
   assert.equal(TR.kusdtSwapAmountIn("0", { buying: true }), null);
 });
 
-await check("kUSDT is a Swap coin, first in the picker", () => {
+await check("kUSDT is a Buy/Sell coin, first on the coin step", () => {
   assert.equal(coinByKey("kusdt:kaspa-trestly"), KUSDT_COIN);
   assert.equal(isTrestlyCoin(KUSDT_COIN), true);
-  assert.match(read("src/swaps.js"), /const out = \[\{ kind: "coin", coin: KUSDT_COIN \}\];/);
+  assert.match(read("src/swaps.js"), /const every = \[KUSDT_COIN, \.\.\.PINNED_GROUP_TICKERS/);
 });
 
 await check("Max on a kUSDT swap (K iOS 6b99c6dd): a buy keeps back 1.8 KAS, a sell spends all the kUSDT", () => {

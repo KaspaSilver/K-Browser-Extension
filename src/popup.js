@@ -172,12 +172,12 @@ async function followAccountSwitch() {
 // Section for section as ProfileView lays it out since KaPay iOS 953b255, KaChat's Wallet tab: the
 // toolbar (connection dot, the whole hot wallet's balance in the middle, the bell, then expand and
 // lock), the backup banner while it's owed and the pinned "Wallet" title; then the total balance
-// split into chatting and spending (WalletBalanceCard), Send, Receive and Request, Backup Hygiene
-// when it's due, the Manage Addresses and Chatting Address squares, Your Usernames and Contacts. No
-// profile card, share button or floating arrows: a profile belongs to KaChat and KaPost. About and
-// the account's name are in Settings. Help is left out: its only guide is the .kachat names guide.
-// Swap (ChangeNOW, KaChat-Desktop Build 217) is the fourth button beside Request, as K iOS 5.4 has
-// it again (518fdc8c).
+// split into chatting and spending (WalletBalanceCard), Send, Receive, Buy and Sell, Backup Hygiene
+// when it's due, then the Chatting Address, Request Payment, Your Usernames, Buy/Sell History and
+// Contacts rows. No profile card, share button or floating arrows: a profile belongs to KaChat and
+// KaPost. About and the account's name are in Settings. Help is left out: its only guide is the
+// .kachat names guide. Buy and Sell replaced Swap and Request on the button row (K iOS 824a30bb,
+// owner 2026-11-26; K-Desktop 32c457c): Request Payment and Buy/Sell History are rows under them.
 //
 // Your Usernames counts the account's .kachat names (K iOS 518fdc8c: the only name service).
 
@@ -363,8 +363,8 @@ function paintHome() {
         <div class="wallet-actions">
           ${actionButton("send", "Send", ACTION.send)}
           ${actionButton("receive", "Receive", ACTION.receive)}
-          ${actionButton("request", "Request", ACTION.request)}
-          ${actionButton("swap", "Swap", ACTION.swap)}
+          ${actionButton("buy", "Buy", ACTION.buy)}
+          ${actionButton("sell", "Sell", ACTION.sell)}
         </div>
         ${hygieneCardHtml()}
         ${IS_TESTNET && main ? faucetCardHtml(main) : ""}
@@ -375,9 +375,15 @@ function paintHome() {
         <button class="glass nav-row" id="chatting-qr" ${main ? "" : "disabled"}>
           <span class="nav-row-label">${ICONS.qr}<span>Chatting Address</span></span>${ICONS.chevron}
         </button>
+        <button class="glass nav-row" id="request">
+          <span class="nav-row-label">${ACTION.requestRow}<span>Request Payment</span></span>${ICONS.chevron}
+        </button>
         <button class="glass nav-row" id="domains">
           <span class="nav-row-label">${ICONS.at}<span>Your Usernames</span></span>
           <span class="nav-row-value">${domainCount ? esc(String(domainCount)) : ""}</span>${ICONS.chevron}
+        </button>
+        <button class="glass nav-row" id="swap-history">
+          <span class="nav-row-label">${ACTION.history}<span>Buy/Sell History</span></span>${ICONS.chevron}
         </button>
         <button class="glass nav-row" id="address-book">
           <span class="nav-row-label">${addressBook.CONTACTS_ICON}<span>Contacts</span></span>${ICONS.chevron}
@@ -405,9 +411,11 @@ function paintHome() {
   $("#send").onclick = () => { if (main) openWalletSend({ kaspaTotalSompi: totalSompi, onKaspa: sendKaspa, onBack: back }); };
   $("#receive").onclick = () => openReceive(back);
   $("#request").onclick = () => showRequestPayment();
-  // Swap (K iOS 518fdc8c, owner 2026-11-23: it replaced Swap Stablecoins): the swap screen itself,
-  // ChangeNOW for coins on other networks and kUSDT through Trestly's pool (K-Desktop d570abd).
-  $("#swap").onclick = () => import("./swaps.js").then((m) => m.showSwap());
+  // Buy and Sell (K iOS 824a30bb): Buy/Sell's steps, ChangeNOW for coins on other networks and kUSDT
+  // through Trestly's pool; Buy asks Crypto or Debit Card on mainnet (buy-kaspa.js).
+  $("#buy").onclick = () => import("./buy-kaspa.js").then((m) => m.openBuyKaspa());
+  $("#sell").onclick = () => import("./swaps.js").then((m) => m.showSwap({ start: "sell" }));
+  $("#swap-history").onclick = () => import("./swaps.js").then((m) => m.showSwap({ start: "history" }));
   $("#kusdt-card").onclick = openKusdtManage;
   for (const pill of document.querySelectorAll("[data-card-pill]")) pill.onclick = () => setWalletCardPage(Number(pill.dataset.cardPill));
   // a finger drags the cards (iOS SlidingCardPager); a mouse uses the pills
@@ -445,17 +453,19 @@ function paintHome() {
   };
 }
 
-/** One of Send, Receive and Request (iOS walletActionButton): a filled accent circle, its name under. */
+/** One of Send, Receive, Buy and Sell (iOS walletActionButton): a filled accent circle, its name under. */
 function actionButton(id, title, icon) {
   return `<button class="wallet-action" id="${id}"><span class="wallet-action-circle">${icon}</span><span>${esc(title)}</span></button>`;
 }
 const stroke = (body, size = 24) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
-// arrow.up / arrow.down / doc.text, and Swap's arrows
+// arrow.up / arrow.down / plus / minus; the rows' doc.text and clock.arrow.circlepath
 const ACTION = {
   send: stroke('<path d="M12 19V5M6 11l6-6 6 6"/>'),
   receive: stroke('<path d="M12 5v14M6 13l6 6 6-6"/>'),
-  request: stroke('<path d="M14 3.5H7.4A1.9 1.9 0 0 0 5.5 5.4v13.2a1.9 1.9 0 0 0 1.9 1.9h9.2a1.9 1.9 0 0 0 1.9-1.9V8Z"/><path d="M14 3.5V8h4.5M9 13h6M9 16.5h4"/>', 22),
-  swap: stroke('<path d="M4 8h15M15 4l4 4-4 4"/><path d="M20 16H5M9 12l-4 4 4 4"/>', 22),
+  buy: stroke('<path d="M12 5v14M5 12h14"/>'),
+  sell: stroke('<path d="M5 12h14"/>'),
+  requestRow: stroke('<path d="M14 3.5H7.4A1.9 1.9 0 0 0 5.5 5.4v13.2a1.9 1.9 0 0 0 1.9 1.9h9.2a1.9 1.9 0 0 0 1.9-1.9V8Z"/><path d="M14 3.5V8h4.5M9 13h6M9 16.5h4"/>', 18),
+  history: stroke('<path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 4.5V8H7"/><path d="M12 7.5V12l3 2"/>', 18),
 };
 
 /** Settings' last row (iOS 040f91a): a half sheet with the consequence beside the action. */

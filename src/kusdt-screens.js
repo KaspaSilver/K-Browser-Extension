@@ -79,7 +79,7 @@ export const KUSDT_TEXT = Object.freeze({
   risk: "Not independently audited yet. Hold only what you can afford to lose.",
   aboutCoin: "Every kUSDT coin holds 1.5 KAS. It goes along with the kUSDT when you send it.",
   emptyTitle: "No kUSDT Yet",
-  emptyText: "Receive it on a fresh address, or swap KAS for it with Swap on the Wallet tab.",
+  emptyText: "Receive it on a fresh address, or get some for your Kaspa with Sell on the Wallet tab.",
   historyEmpty: "No kUSDT activity yet.",
   historyEmptyNote: "Sends, receives and combines in this browser show here from now on.",
   visibilityEmptyPage: "These addresses couldn't be derived right now. Go back a page or reopen this screen to retry.",
@@ -165,10 +165,10 @@ export function watchKusdtCard(onChange) {
   return () => cardListeners.delete(onChange);
 }
 
-// --- §2 Swap (K 5.4: the Wallet's Swap button, swaps.js; Swap Stablecoins went) ----------------
+// --- §2 Swap (K 824a30bb: the Wallet's Buy and Sell, swaps.js; Swap Stablecoins went) ------------
 
-/** Swap with kUSDT picked, buying it with KAS (K-Desktop d570abd openKusdtSwap): Send kUSDT's way
- *  to get some when none of your addresses holds any. */
+/** Sell Kaspa for kUSDT, straight on the order (K-Desktop selectSwapCoin): Send kUSDT's way to get
+ *  some when none of your addresses holds any. */
 export function openKusdtSwap() {
   import("./swaps.js").then((m) => m.showSwap({ coin: "kusdt", buying: true }));
 }
@@ -1185,7 +1185,7 @@ const GUIDE_CARDS = [
   { icon: "arrowUp", title: "Sending kUSDT", detail: "A send takes a little KAS from the same address for the network fee, plus 1.5 KAS for your change coin when you keep some kUSDT. If the address is short, Fund This Address tops it up from another of your addresses." },
   { icon: "merge", title: "Combine Coins", detail: "Each payment you receive is its own coin with its own 1.5 KAS. Combine Coins, in an address's menu, merges them into one and gives the extra KAS back." },
   // the K-Desktop wording (owner, 2026-11-20): Trestly's own site, in a new tab
-  { icon: "swap", title: "Swapping", detail: "To swap KAS and kUSDT, click Swap on the Wallet tab and choose kUSDT (Kaspa). K trades it through Trestly's pool with Trestly's own code, and asks you to approve each swap before anything is signed. To add to the pool, click Open Trestly in Manage kUSDT." },
+  { icon: "swap", title: "Swapping", detail: "To trade KAS and kUSDT, click Buy or Sell on the Wallet tab and choose kUSDT (Kaspa). K trades it through Trestly's pool with Trestly's own code, and asks you to approve each swap before anything is signed. To add to the pool, click Open Trestly in Manage kUSDT." },
   { icon: "clock", title: "History", detail: "kUSDT history is kept in this browser: sends, combines and payments received from now on. What happened before, or in another app, isn't shown." },
   { icon: "warning", title: "The Risks", detail: KUSDT_TEXT.risk, tone: "warn" },
 ];
